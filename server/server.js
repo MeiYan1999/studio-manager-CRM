@@ -22,6 +22,7 @@ const pool = new Pool({
   ssl: /sslmode=require|neon\.tech|render\.com/.test(DATABASE_URL) ? { rejectUnauthorized: false } : undefined,
 });
 const app = express();
+app.use(express.json({ limit: '10mb' })); // đọc JSON body cho mọi API POST (lỗi từng quên dòng này → không lưu gì được lên server)
 
 // Session giữ trong bộ nhớ — khởi động lại server thì mọi người đăng nhập lại (an toàn)
 const sessions = new Map(); // token -> userId
