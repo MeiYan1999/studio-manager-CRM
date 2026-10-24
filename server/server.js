@@ -132,7 +132,11 @@ app.post('/api/portal-select', async (req, res) => {
     const b = ((st && st.bookings) || []).find(x => x.portalToken === body.token);
     if (!b) return res.status(404).json({ error: 'Liên kết không hợp lệ' });
     const ids = body.ids || [];
-    ((b.gallery && b.gallery.photos) || []).forEach(p => { p.selected = ids.includes(p.id); });
+    const notes = body.notes || {};
+    ((b.gallery && b.gallery.photos) || []).forEach(p => {
+      p.selected = ids.includes(p.id);
+      if (Object.prototype.hasOwnProperty.call(notes, p.id)) p.note = String(notes[p.id] || '').slice(0, 300);
+    });
     await setState(st);
     res.json({ ok: true, selected: ids.length });
   } catch (e) { res.status(500).json({ error: 'Lỗi máy chủ: ' + e.message }); }

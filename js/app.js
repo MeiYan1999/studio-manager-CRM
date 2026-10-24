@@ -157,9 +157,29 @@ function save() {
   }
 }
 
+let __galleryTouchedAt = 0; // studio vừa sửa album thì 3 phút đầu ưu tiên bản local
+
 async function pushState() {
   if (!__stateDirty) return;
   __stateDirty = false;
+  // Gộp lựa chọn ❤ + ghi chú mà KHÁCH vừa bấm ở cổng khách hàng (tránh bị đè mất khi nhân viên lưu)
+  if (Date.now() - __galleryTouchedAt > 180000) {
+    try {
+      const r = await fetch('/api/state?token=' + encodeURIComponent(API_TOKEN));
+      if (r.ok) {
+        const st = await r.json();
+        ((st && st.bookings) || []).forEach(sb => {
+          if (!sb.gallery || !sb.portalToken) return;
+          const lb = state.bookings.find(x => x.id === sb.id);
+          if (!lb || !lb.gallery) return;
+          const sp = {}; (sb.gallery.photos || []).forEach(p => sp[p.id] = p);
+          (lb.gallery.photos || []).forEach(p => {
+            if (sp[p.id]) { p.selected = !!sp[p.id].selected; if (sp[p.id].note !== undefined) p.note = sp[p.id].note; }
+          });
+        });
+      }
+    } catch (e) { }
+  }
   try {
     await fetch('/api/state', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -4610,6 +4630,7 @@ function saveGallery(bookingId, reopen) {
     b.gallery.photos.forEach(p => { p.selected = selCodes.has(p.code); });
   }
   logAction('update', 'portal', custName(b.customerId) + ' — thư viện & cổng KH');
+  __galleryTouchedAt = Date.now();
   save();
   if (!reopen) { closeModal(); render(); toast('Đã lưu thư viện & link cổng khách hàng'); }
   else { closeModal(); openGalleryModal(bookingId); }
@@ -4626,9 +4647,12 @@ function openPortalNow(bookingId) {
   location.hash = 'portal-' + b.portalToken;
 }
 
-function renderPortalScreen(token) {
+let __portalRemote = null; // {token, data} — portal đang xem từ server (máy không có dữ liệu local)
+
+async function renderPortalScreen(token) {
   const b = state.bookings.find(x => x.portalToken === token);
   const body = $('#portalBody');
+  if (!b && SERVER_MODE) return renderPortalRemote(token);
   if (!b) {
     body.innerHTML = `<div class="portal-hero"><h1>${esc(state.settings.studioName)}</h1><p>Cổng khách hàng</p></div>
       <div class="portal-wrap"><div class="portal-card" style="text-align:center;padding:40px">${iconWrap('alert')}<h4 style="margin-top:10px">Liên kết không hợp lệ hoặc đã hết hạn</h4>
@@ -4702,18 +4726,144 @@ function renderPortalScreen(token) {
   </div>`;
 }
 
+/* ---- Portal chế độ online: máy khách không có dữ liệu local → tải từ server ---- */
+async function renderPortalRemote(token) {
+  const body = $('#portalBody');
+  body.innerHTML = `<div class="portal-hero"><h1>${esc(state.settings.studioName)}</h1><p>Cổng khách hàng</p></div>
+    <div class="portal-wrap"><div class="portal-card" style="text-align:center;padding:40px">${iconWrap('refresh')}<p style="margin-top:10px;font-size:13px;color:var(--text-2)">Đang tải album…</p></div></div>`;
+  let d;
+  try {
+    const r = await fetch('/api/portal/' + encodeURIComponent(token));
+    if (!r.ok) throw new Error('link');
+    d = await r.json();
+  } catch (e) {
+    __portalRemote = null;
+    body.innerHTML = `<div class="portal-hero"><h1>${esc(state.settings.studioName)}</h1><p>Cổng khách hàng</p></div>
+      <div class="portal-wrap"><div class="portal-card" style="text-align:center;padding:40px">${iconWrap('alert')}<h4 style="margin-top:10px">Liên kết không hợp lệ hoặc đã hết hạn</h4>
+      <button class="btn btn-primary" style="margin-top:16px" onclick="location.hash='dashboard'">Về trang chủ</button></div></div>`;
+    return;
+  }
+  __portalRemote = { token, data: d };
+  const g = d.gallery || {};
+  if (g.pin && sessionStorage.getItem('portalPinOk_' + token) !== '1') {
+    body.innerHTML = `
+    <div class="portal-hero"><h1>${esc(d.studioName)}</h1><p>Album của ${esc(d.customerName)}</p></div>
+    <div class="portal-wrap" style="max-width:380px">
+      <div class="portal-card" style="text-align:center">
+        <div class="stat-icon tint-indigo" style="margin:0 auto 12px">${icon('lock')}</div>
+        <h3>Nhập mã PIN để xem album</h3>
+        <p style="font-size:12.5px;color:var(--text-2);margin:8px 0 14px">Mã PIN do studio cung cấp (4–6 số)</p>
+        <div class="auth-error" id="pinErr" style="display:none"></div>
+        <input class="input" id="portalPin" inputmode="numeric" maxlength="6" style="text-align:center;font-size:22px;letter-spacing:.4em;font-weight:800" placeholder="••••" onkeydown="if(event.key==='Enter')portalTryPin('${token}')">
+        <button class="btn btn-primary btn-block" style="margin-top:12px" onclick="portalTryPin('${token}')">Mở album</button>
+      </div>
+    </div>`;
+    setTimeout(() => { const el = $('#portalPin'); if (el) el.focus(); }, 60);
+    return;
+  }
+  const idx = FLOW.indexOf(d.status);
+  const photos = g.photos || [];
+  const selCount = photos.filter(p => p.selected).length;
+  const allowSelect = g.allowSelect;
+  const remain = d.pay ? d.pay.total - d.pay.paid : 0;
+  body.innerHTML = `
+  <div class="portal-hero"><h1>${esc(d.studioName)}</h1><p>Cổng khách hàng — cập nhật trực tiếp</p></div>
+  <div class="portal-wrap">
+    <div class="portal-msg" id="portalMsg"></div>
+    ${(g.greeting && allowSelect) ? `<div class="portal-card" style="background:#eef2ff;border-color:#c7d2fe;font-size:13px;line-height:1.7">💌 <b>${esc(d.studioName)}</b> gửi lời chào:<br>${esc(g.greeting)}</div>` : ''}
+    <div class="portal-card">
+      <h3>Xin chào ${esc(d.customerName || 'quý khách')} 👋</h3>
+      <p style="font-size:13px;color:var(--text-2);line-height:1.7">
+        Buổi chụp <b>${esc(d.pkgName)}</b> — ${fmtDateLong(d.date)}${d.startTime ? ', ' + d.startTime : ''}<br>
+        Địa điểm: ${esc(d.location || '—')}</p>
+      <div class="p-steps" style="margin-top:14px">
+        ${FLOW.map((st, i) => `<div class="p-step ${i < idx ? 'done' : ''} ${i === idx ? 'cur' : ''}"><div class="d">${i < idx ? '✓' : i + 1}</div>${BK_STATUS[st].label}</div>`).join('')}
+      </div>
+      ${d.status === 'cancelled' ? `<div class="cancel-banner" style="margin-top:12px">${icon('alert')} Buổi chụp này đã bị hủy.</div>` : ''}
+    </div>
+    ${d.pay ? `<div class="portal-card"><h3>Thanh toán</h3>
+      <div class="pay-progress"><div style="width:${d.pay.total ? Math.min(100, Math.round(d.pay.paid / d.pay.total * 100)) : 0}%"></div></div>
+      <div class="pay-legend"><span>Đã thanh toán <b>${fmtMoney(d.pay.paid)}</b></span><span>Còn lại <b style="color:${remain > 0 ? 'var(--red)' : 'var(--green)'}">${fmtMoney(remain)}</b></span></div>
+    </div>` : ''}
+    <div class="portal-card">
+      <h3>${g.title ? esc(g.title) : 'Chọn ảnh cần chỉnh sửa'} ${photos.length ? `(${selCount}/${photos.length}${g.includedQty ? ' · gói ' + g.includedQty : ''} đã chọn)` : ''}</h3>
+      ${g.includedQty && selCount > g.includedQty ? `<div class="auth-error" style="display:flex;background:#fffbeb;border-color:#fde68a;color:#92400e">⚠ Bạn đã chọn vượt ${selCount - g.includedQty} ảnh so với gói${g.extraPrice ? ' — phụ thu ' + fmtMoney((selCount - g.includedQty) * g.extraPrice) : ''}. Có thể bỏ bớt tim nếu muốn.</div>` : ''}
+      ${photos.length ? (allowSelect
+        ? `<p style="font-size:12.5px;color:var(--text-2);margin-bottom:12px">Bấm <b>❤ thả tim</b> vào ảnh bạn thích${g.allowNotes !== false ? ', có thể <b>✎ ghi chú yêu cầu sửa</b> cho từng ảnh' : ''} rồi bấm <b>Gửi Studio</b>.</p>
+           <div class="photo-grid">${photos.map(p => `
+           <div class="photo-tile ${p.selected ? 'sel' : ''}" data-pid="${p.id}" onclick="this.classList.toggle('sel');this.querySelector('.tick').textContent=this.classList.contains('sel')?'❤ đã chọn':''">
+             ${g.watermark ? `<div class="wm">© ${esc(d.studioName)}</div>` : ''}
+             <div class="pc">${esc(p.code)}</div><div class="pn">${esc(p.name)}</div><div class="tick">${p.selected ? '❤' + (p.note ? ' 📝' : '') + ' đã chọn' : ''}</div>
+             ${g.allowNotes !== false ? `<div style="font-size:10px;margin-top:2px"><a class="link" style="font-size:10px" onclick="event.stopPropagation();portalRemoteNote('${token}','${p.id}')">✎ ghi chú sửa</a>${p.note ? `<div class="cell-sub" style="font-size:9.5px;margin-top:2px">${esc(p.note)}</div>` : ''}</div>` : ''}
+           </div>`).join('')}</div>
+           <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap">
+             <button class="btn btn-ghost" style="flex:1" onclick="portalRemoteCopy('${token}')">${icon('receipt')} Copy mã ảnh đã chọn</button>
+             ${g.allowSubmit !== false ? `<button class="btn btn-primary" style="flex:1" onclick="portalRemoteSubmit('${token}')">${icon('check')} Gửi Studio</button>` : ''}
+             ${g.allowDownload && /^https?:/.test(g.sourceUrl || '') ? `<a class="btn btn-ghost" style="flex:1;text-decoration:none" href="${esc(g.sourceUrl)}" target="_blank" rel="noopener">${icon('download')} Tải ảnh gốc</a>` : ''}
+           </div>`
+        : `<p style="font-size:12.5px;color:var(--text-2)">Danh sách ảnh đã sẵn sàng. Studio sẽ mở tính năng chọn ảnh khi hậu kỳ xong — bạn vui lòng quay lại sau nhé.</p>
+           <div class="photo-grid" style="opacity:.65">${photos.map(p => `<div class="photo-tile"><div class="pc">${esc(p.code)}</div><div class="pn">${esc(p.name)}</div></div>`).join('')}</div>`)
+      : `<p style="font-size:12.5px;color:var(--text-2)">Ảnh sẽ được studio cập nhật sau buổi chụp. Bạn có thể theo dõi tiến độ ở trên.</p>`}
+    </div>
+    <div style="text-align:center"><button class="btn btn-ghost" onclick="location.hash='dashboard'">Về trang chủ studio</button></div>
+  </div>`;
+}
+
+function portalRemotePhotos() {
+  return (__portalRemote && __portalRemote.data.gallery && __portalRemote.data.gallery.photos) || [];
+}
+
+function portalRemoteCopy(token) {
+  const ids = $$('#portalBody .photo-tile.sel').map(t => t.dataset.pid);
+  const codes = portalRemotePhotos().filter(p => ids.includes(p.id)).map(p => p.code);
+  if (!codes.length) { const msg = $('#portalMsg'); msg.style.display = 'block'; msg.style.background = '#fef2f2'; msg.style.borderColor = '#fecaca'; msg.style.color = '#b91c1c'; msg.textContent = 'Bạn chưa thả tim ảnh nào — bấm vào ảnh để chọn nhé!'; return; }
+  const text = codes.join(', ');
+  if (navigator.clipboard) navigator.clipboard.writeText(text).catch(() => { });
+  const msg = $('#portalMsg');
+  msg.style.display = 'block'; msg.style.background = '#ecfdf5'; msg.style.borderColor = '#a7f3d0'; msg.style.color = '#047857';
+  msg.textContent = '✓ Đã copy ' + codes.length + ' mã ảnh: ' + text;
+}
+
+async function portalRemoteSubmit(token) {
+  const ids = $$('#portalBody .photo-tile.sel').map(t => t.dataset.pid);
+  try {
+    const r = await fetch('/api/portal-select', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token, ids }) });
+    if (!r.ok) throw new Error('lưu');
+    const msg = $('#portalMsg');
+    if (msg) { msg.style.display = 'block'; msg.style.background = '#ecfdf5'; msg.style.borderColor = '#a7f3d0'; msg.style.color = '#047857'; msg.textContent = '✓ Đã lưu ' + ids.length + ' ảnh bạn chọn — studio đã nhận được!'; }
+    document.querySelector('.portal-wrap').scrollIntoView({ behavior: 'smooth' });
+  } catch (e) { toast('Không gửi được — kiểm tra mạng rồi thử lại', 'error'); }
+}
+
+async function portalRemoteNote(token, pid) {
+  const p = portalRemotePhotos().find(x => x.id === pid);
+  if (!p) return;
+  const v = prompt('Yêu cầu sửa ảnh ' + p.code + ' (VD: làm mờ sau, crop mặt...):', p.note || '');
+  if (v === null) return;
+  p.note = v.trim();
+  const tile = document.querySelector('#portalBody .photo-tile[data-pid="' + pid + '"]');
+  const ids = $$('#portalBody .photo-tile.sel').map(t => t.dataset.pid);
+  if (v.trim()) {
+    if (tile) { tile.classList.add('sel'); const t = tile.querySelector('.tick'); if (t) t.innerHTML = '❤ 📝'; }
+    if (!ids.includes(pid)) ids.push(pid);
+  }
+  fetch('/api/portal-select', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token, ids, notes: { [pid]: v.trim() } }) }).catch(() => { });
+}
+
 function portalTryPin(token) {
   const b = state.bookings.find(x => x.portalToken === token);
   const val = ($('#portalPin').value || '').replace(/\D/g, '');
   const err = $('#pinErr');
-  if (!b || val !== (b.gallery.pin || '')) {
+  const pin = b ? ((b.gallery && b.gallery.pin) || '')
+    : (__portalRemote && __portalRemote.token === token && __portalRemote.data.gallery ? (__portalRemote.data.gallery.pin || '') : null);
+  if (pin === null || val !== pin) {
     err.style.display = 'flex';
     err.textContent = 'Mã PIN không đúng — thử lại nhé';
     $('#portalPin').value = '';
     return;
   }
   sessionStorage.setItem('portalPinOk_' + token, '1');
-  renderPortalScreen(token);
+  if (b) renderPortalScreen(token); else renderPortalRemote(token);
 }
 
 /* ---- Ghi chú yêu cầu sửa ảnh + Google Calendar ---- */
