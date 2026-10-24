@@ -1,0 +1,4 @@
+.DS_Store
+.zcode/
+node_modules/
+*.log

@@ -3478,7 +3478,7 @@ function albumsView() {
 }
 
 function pfParseCodes(raw, mode) {
-  const toks = String(raw || '').split(/[^A-Za-z0-9.]+/).filter(Boolean)
+  const toks = String(raw || '').split(/[\s,;\n\r\t]+/).filter(Boolean)
     .map(t => t.replace(/\.(jpe?g|png|tiff?|heic|webp|arw|cr2|cr3|nef|dng|raw)$/i, ''));
   const set = [...new Set(toks.filter(t => t.length))];
   if (mode !== 'digits') return set;
@@ -3487,7 +3487,7 @@ function pfParseCodes(raw, mode) {
 
 function pfMatch(base, code, mode) {
   const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  if (mode === 'digits') { const d = base.match(/\d+/g); return !!d && d.includes(code); }
+  if (mode === 'digits') { const d = base.match(/\d+/g); return !!d && d.some(x => Number(x) === Number(code)); }
   return new RegExp('(^|[^A-Za-z0-9])' + esc(code) + '($|[^A-Za-z0-9])').test(base);
 }
 
