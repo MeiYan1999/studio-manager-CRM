@@ -2726,7 +2726,7 @@ function doImport(input) {
   input.value = '';
   if (!file) return;
   const reader = new FileReader();
-  reader.onload = () => {
+  reader.onload = async () => {
     try {
       const parsed = JSON.parse(reader.result);
       if (!parsed || !Array.isArray(parsed.customers) || !Array.isArray(parsed.orders)) throw new Error('invalid');
@@ -2746,7 +2746,11 @@ function doImport(input) {
       save(); render(); toast('Đã nhập dữ liệu từ backup');
       logAction('data', 'system', 'Nhập backup từ file JSON');
       const su = currentUser();
-      if (!su || !byId(state.users, su.id)) logout();
+      if (!su || !byId(state.users, su.id)) {
+        // Đẩy dữ liệu lên server TRƯỚC khi đăng xuất (tránh mất dữ liệu vừa nhập trên bản online)
+        if (SERVER_MODE) { try { await pushState(); } catch (e) { } }
+        logout();
+      }
     } catch (e) {
       toast('File không hợp lệ — cần file backup JSON của app', 'error');
     }
