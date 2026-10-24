@@ -181,10 +181,11 @@ async function pushState() {
     } catch (e) { }
   }
   try {
-    await fetch('/api/state', {
+    const r = await fetch('/api/state', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ token: API_TOKEN, state }),
     });
+    if (!r.ok && r.status !== 401) { __stateDirty = true; toast('⚠ Dữ liệu chưa đồng bộ lên server — sẽ thử lại khi bạn thao tác tiếp', 'error'); }
   } catch (e) { __stateDirty = true; }
 }
 
@@ -2952,6 +2953,7 @@ async function authRegister() {
   });
   logAction('create', 'user', username + ' (quản trị đầu tiên)', state.users[0]);
   save();
+  if (SERVER_MODE) { try { await pushState(); } catch (e) { } } // chắc chắn tài khoản lên server rồi mới vào app
   startApp(state.users[0].id, false);
   toast('Đã tạo tài khoản quản trị — chào mừng!');
 }
