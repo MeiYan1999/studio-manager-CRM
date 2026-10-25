@@ -2081,6 +2081,7 @@ function openOrderModal(id, bookingId) {
         <div class="field"><label>Đã thanh toán (₫)</label><input class="input" id="oPaid" type="number" min="0" step="1000" value="${o ? (+o.paidAmount || 0) : 0}" oninput="recalcOrderTotals()"></div>
         <div class="field"><label>Trạng thái đơn</label><select class="select" id="oStatus">${stOpts}</select></div>
         <div class="field full"><label>Ghi chú</label><textarea class="textarea" id="oNotes" placeholder="Điều khoản, ghi chú thanh toán...">${esc(o ? o.notes : '')}</textarea></div>
+        ${attBlockHtml()}
       </div>
 
       <div class="totals-box" style="margin-top:14px">
@@ -2094,6 +2095,7 @@ function openOrderModal(id, bookingId) {
       <button class="btn btn-primary" onclick="saveOrder('${id || ''}')">${icon('check')} Lưu đơn hàng</button>
     </div>`, 'lg');
 
+  attInit(o && o.photos);
   recalcOrderTotals();
 }
 
@@ -2164,6 +2166,7 @@ function saveOrder(id) {
     paidAmount: Math.round(+$('#oPaid').value || 0),
     status: $('#oStatus').value,
     notes: $('#oNotes').value.trim(),
+    photos: __attTemp.slice(),
   };
 
   if (id) {
@@ -2226,6 +2229,8 @@ function viewOrder(id) {
       <div class="pay-legend"><span>Đã thu <b>${fmtMoney(paid)}</b> (${pct}%)</span><span>Còn lại <b style="color:${remain > 0 ? 'var(--red)' : 'var(--green)'}">${fmtMoney(remain)}</b></span></div>
       ${o.qrPending ? `<div class="cancel-banner" style="margin-top:12px;border-color:#fde68a;background:#fffbeb">${icon('clock')} Khách báo <b>đã QR chuyển khoản ${fmtMoney(o.qrPending.amount)}</b> lúc ${fmtDateTime(o.qrPending.ts)} — <a class="link" onclick="openQrPayModal('${o.id}')">duyệt ngay</a></div>` : ''}
       ${o.notes ? `<div class="cancel-banner" style="margin-top:14px">${icon('edit')} ${esc(o.notes)}</div>` : ''}
+      ${o.photos && o.photos.length ? `<div class="section-title" style="margin-top:16px">Ảnh đính kèm (${o.photos.length})</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">${o.photos.map(p => `<img src="${p}" onclick="viewPhotosOf('order','${o.id}')" style="width:76px;height:76px;object-fit:cover;border-radius:10px;cursor:zoom-in;border:1px solid var(--border)">`).join('')}</div>` : ''}
     </div>
     <div class="modal-foot" style="flex-wrap:wrap">
       <button class="btn btn-danger" onclick="closeModal();deleteOrder('${o.id}')">${icon('trash')} Xóa</button>
@@ -4433,6 +4438,81 @@ function reportTab() {
   </div>`;
 }
 
+/* ---- Đính kèm ảnh (biên lai chi, thu chi, hóa đơn) ---- */
+const ATT_MAX = 4;
+let __attTemp = [];
+const attInit = photos => { __attTemp = (photos || []).slice(0, ATT_MAX); attPaint(); };
+
+function compressImageFile(file) {
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const sc = Math.min(1, 1100 / Math.max(img.width, img.height));
+        const c = document.createElement('canvas');
+        c.width = Math.round(img.width * sc); c.height = Math.round(img.height * sc);
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        res(c.toDataURL('image/jpeg', 0.72));
+      };
+      img.onerror = () => rej(new Error('đọc ảnh lỗi'));
+      img.src = r.result;
+    };
+    r.onerror = () => rej(new Error('đọc file lỗi'));
+    r.readAsDataURL(file);
+  });
+}
+
+function attBlockHtml() {
+  return `<div class="field full"><label>📷 Ảnh đính kèm — biên lai, hóa đơn, chứng từ (tối đa ${ATT_MAX} ảnh)</label>
+    <div id="attBox" class="att-box"></div>
+    <input type="file" id="attInput" accept="image/*" multiple style="display:none" onchange="attAddFiles(this)">
+  </div>`;
+}
+
+function attPaint() {
+  const box = $('#attBox'); if (!box) return;
+  box.innerHTML = __attTemp.map((d, i) => `
+    <div class="att-thumb"><img src="${d}" onclick="attView(${i})" alt="ảnh ${i + 1}">
+    <button type="button" class="att-x" title="Xóa ảnh" onclick="attRemove(${i})">×</button></div>`).join('') +
+    (__attTemp.length < ATT_MAX ? `<button type="button" class="att-add" onclick="$('#attInput').click()">${icon('camera')} Thêm ảnh</button>` : '');
+}
+
+async function attAddFiles(input) {
+  const files = [...(input.files || [])];
+  input.value = '';
+  const room = ATT_MAX - __attTemp.length;
+  if (files.length > room) toast('Tối đa ' + ATT_MAX + ' ảnh — chỉ thêm ' + Math.max(0, room) + ' ảnh đầu', 'error');
+  for (const f of files.slice(0, room)) {
+    try { __attTemp.push(await compressImageFile(f)); }
+    catch (e) { toast('Không đọc được ảnh: ' + f.name, 'error'); }
+  }
+  attPaint();
+}
+
+function attRemove(i) { __attTemp.splice(i, 1); attPaint(); }
+
+function attView(i) {
+  if (!__attTemp[i]) return;
+  openModal(`<div class="modal-head"><h3>Ảnh đính kèm ${i + 1}/${__attTemp.length}</h3><button class="icon-btn" onclick="closeModal()">${icon('x')}</button></div>
+    <div class="modal-body" style="text-align:center"><img src="${__attTemp[i]}" style="max-width:100%;border-radius:12px"></div>`, 'lg');
+}
+
+function viewPhotos(photos) {
+  const list = photos || [];
+  if (!list.length) return;
+  openModal(`<div class="modal-head"><h3>Ảnh đính kèm (${list.length})</h3><button class="icon-btn" onclick="closeModal()">${icon('x')}</button></div>
+  <div class="modal-body" style="text-align:center">
+    <img id="attBig" src="${list[0]}" style="max-width:100%;border-radius:12px">
+    ${list.length > 1 ? `<div style="display:flex;gap:8px;justify-content:center;margin-top:12px;flex-wrap:wrap">${list.map(p => `<img src="${p}" onclick="document.getElementById('attBig').src=this.src" style="width:64px;height:64px;object-fit:cover;border-radius:8px;cursor:pointer;border:1px solid var(--border)">`).join('')}</div>` : ''}
+  </div>`, 'lg');
+}
+
+function viewPhotosOf(kind, id) {
+  const r = kind === 'cash' ? byId(state.cash, id) : kind === 'expense' ? byId(state.expenses, id) : byId(state.orders, id);
+  viewPhotos(r && r.photos);
+}
+
 /* ---- Quản lý Thu chi (sổ quỹ) ---- */
 function cashFiltered() {
   const m = viewState.finance.month;
@@ -4476,7 +4556,7 @@ function cashTab() {
           <td class="cell-main">${esc(x.cat)}</td>
           <td class="money-muted">${esc(x.method || '—')}</td>
           <td>${o ? `<a class="link" onclick="viewOrder('${o.id}')">${esc(o.code)}</a>` : '<span class="cell-sub">—</span>'}</td>
-          <td class="money-muted">${esc(x.note || '—')}</td>
+          <td class="money-muted">${esc(x.note || '—')}${x.photos && x.photos.length ? ` <a class="link" style="font-size:11px" onclick="viewPhotosOf('cash','${x.id}')">📷 ${x.photos.length} ảnh</a>` : ''}</td>
           <td class="money ta-r" style="color:${x.type === 'in' ? 'var(--green)' : 'var(--red)'}">${x.type === 'in' ? '+' : '−'}${fmtMoney(+x.amount || 0)}</td>
           <td class="cell-actions ta-c">
             <button class="icon-btn" title="Sửa" onclick="openCashModal('${x.id}')">${icon('edit')}</button>
@@ -4516,11 +4596,13 @@ function openCashModal(id) {
       <div class="field"><label>Hình thức</label><select class="select" name="method">${CASH_METHODS.map(m => `<option ${x && x.method === m ? 'selected' : ''}>${m}</option>`).join('')}</select></div>
       <div class="field"><label>Liên kết đơn hàng</label><select class="select" name="orderId"><option value="">— Không —</option>${orderOpts}</select></div>
       <div class="field full"><label>Ghi chú</label><input class="input" name="note" value="${esc(x ? x.note || '' : '')}" placeholder="Nội dung giao dịch..."></div>
+      ${attBlockHtml()}
     </form>
     <div class="modal-foot">
       <button class="btn btn-ghost" onclick="closeModal()">Hủy</button>
       <button class="btn btn-primary" onclick="saveCash('${id || ''}')">${icon('check')} Lưu giao dịch</button>
     </div>`);
+  attInit(x && x.photos);
 }
 
 function cashPickType(t) {
@@ -4539,7 +4621,7 @@ function saveCash(id) {
   const data = {
     type: fd.get('type'), date: fd.get('date'), amount: +fd.get('amount') || 0,
     cat: fd.get('cat') || 'Khác', method: fd.get('method'), orderId: fd.get('orderId') || '',
-    note: fd.get('note').trim(),
+    note: fd.get('note').trim(), photos: __attTemp.slice(),
   };
   const u = currentUser();
   if (id) {
@@ -4577,7 +4659,7 @@ function expensesTab() {
       <td class="money-muted">${fmtDate(e.date)}</td>
       <td><span class="badge b-cat-khac">${esc(e.category)}</span></td>
       <td class="money-red ta-r">${fmtMoney(e.amount)}</td>
-      <td class="money-muted">${esc(e.note || '—')}</td>
+      <td class="money-muted">${esc(e.note || '—')}${e.photos && e.photos.length ? ` <a class="link" style="font-size:11px" onclick="viewPhotosOf('expense','${e.id}')">📷 ${e.photos.length} ảnh</a>` : ''}</td>
       <td class="cell-actions ta-c">
         <button class="icon-btn" onclick="openExpenseModal('${e.id}')">${icon('edit')}</button>
         <button class="icon-btn danger" onclick="deleteExpense('${e.id}')">${icon('trash')}</button>
@@ -4596,18 +4678,20 @@ function openExpenseModal(id) {
       <div class="field"><label>Loại</label><select class="select" name="category">${EXP_CATS.map(c => `<option ${e && e.category === c ? 'selected' : ''}>${c}</option>`).join('')}</select></div>
       <div class="field"><label>Chi nhánh</label><select class="select" name="branchId">${state.branches.map(x => `<option value="${x.id}" ${(e ? e.branchId === x.id : x.id === curBranchId()) ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select></div>
       <div class="field full"><label>Ghi chú</label><input class="input" name="note" value="${esc(e ? e.note : '')}"></div>
+      ${attBlockHtml()}
     </form>
     <div class="modal-foot">
       <button class="btn btn-ghost" onclick="closeModal()">Hủy</button>
       <button class="btn btn-primary" onclick="saveExpense('${id || ''}')">${icon('check')} Lưu</button>
     </div>`);
+  attInit(e && e.photos);
 }
 
 function saveExpense(id) {
   const f = $('#frm');
   if (!f.reportValidity()) return;
   const fd = new FormData(f);
-  const data = { date: fd.get('date'), amount: Math.round(+fd.get('amount') || 0), category: fd.get('category'), note: fd.get('note').trim(), branchId: fd.get('branchId') || curBranchId() };
+  const data = { date: fd.get('date'), amount: Math.round(+fd.get('amount') || 0), category: fd.get('category'), note: fd.get('note').trim(), branchId: fd.get('branchId') || curBranchId(), photos: __attTemp.slice() };
   if (id) { Object.assign(byId(state.expenses, id), data); logAction('update', 'expense', data.category + ' ' + fmtMoney(data.amount)); }
   else { state.expenses.push(Object.assign({ id: uid() }, data)); logAction('create', 'expense', data.category + ' ' + fmtMoney(data.amount)); }
   save(); closeModal(); render();
