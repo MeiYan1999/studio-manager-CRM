@@ -76,9 +76,10 @@ const SHIFTS = {
 const shiftOf = s => SHIFTS[(s && s.shift) || 'normal'] || SHIFTS.normal;
 
 // ---- Nhật ký cập nhật (changelog) ----
-const APP_VERSION = '3.6';
+const APP_VERSION = '3.7';
 const CL_KIND = { new: ['✨ mới', 'b-delivered'], fix: ['🐛 sửa lỗi', 'b-unpaid'], ui: ['🎨 giao diện', 'b-deposit'], imp: ['⚡ nâng cấp', 'b-confirmed'] };
 const CHANGELOG = [
+  { v: '3.7', d: '26/10/2026', items: [['ui', 'Tạo Album thành 3 bước gọn: dán link Google Drive → nhập số ảnh (tự sinh mã A01…) → copy link thả tim ❤ gửi khách'], ['new', 'Cổng khách nhúng khung xem ảnh Google Drive thật ngay trên trang thả tim (Drive chia sẻ kiểu ai-có-link)']] },
   { v: '3.6', d: '26/10/2026', items: [['new', 'Chấm công di chuyển chi nhánh: GPS ghi cả lúc thoát ca; nếu vào ca không ở chi nhánh nào thì ngày công ghi nhận theo chi nhánh khớp GPS thoát ca — hiện nhãn "Làm tại: Chi nhánh…" và 2 dòng vị trí Vào/Ra kèm bản đồ']] },
   { v: '3.5', d: '26/10/2026', items: [['ui', 'Thanh trên: đồng hồ Việt Nam chạy từng giây (giờ:phút:giây + thứ, ngày/tháng/năm) cạnh 2 nút "Vào ca làm" / "Thoát ca làm" luôn hiển thị — nút không khả dụng tự mờ đi']] },
   { v: '3.4', d: '26/10/2026', items: [['ui', 'Tinh chỉnh toàn diện theo taste-skill: bảng màu stone ấm + than + 1 accent vàng (bỏ tím mặc định), nút lún nhẹ khi bấm, đổi trang có chuyển động cascade, header bảng chữ in hoa giãn dòng, focus ring rõ, modal mờ nền pop spring']] },
@@ -5573,79 +5574,89 @@ th{background:#f4f5fb;text-align:left}
 }
 
 /* ================= CỔNG KHÁCH HÀNG ================= */
+function driveFolderId(url) {
+  const s = String(url || '');
+  let m = s.match(/drive\.google\.com\/(?:drive\/(?:u\/\d+\/)?folders|folderview\?id=)\/?([A-Za-z0-9_-]{10,})/);
+  if (!m) m = s.match(/[?&]id=([A-Za-z0-9_-]{10,})/);
+  return m ? m[1] : '';
+}
+
 function openGalleryModal(bookingId) {
   const b = byId(state.bookings, bookingId);
   if (!b) return;
-  if (!b.gallery) b.gallery = { allowSelect: false, photos: [] };
+  if (!b.gallery) b.gallery = { allowSelect: true, photos: [] };
   if (!b.portalToken) b.portalToken = uid();
   const g = b.gallery;
   const cust = byId(state.customers, b.customerId) || {};
   const selCount = g.photos.filter(p => p.selected).length;
   const url = location.origin + location.pathname + '#portal-' + b.portalToken;
-  const sec = (t, ic, inner) => `<div class="card" style="padding:15px 16px;margin-bottom:12px">
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px" class="cell-main">${icon(ic)} ${t}</div>${inner}</div>`;
-  const chk = (id, label, on, hint) => `<div class="checkbox-row" style="margin:7px 0"><input type="checkbox" id="${id}" ${on ? 'checked' : ''}><label for="${id}">${label}</label></div>${hint ? `<div class="form-hint" style="margin-left:24px;margin-top:-3px">${hint}</div>` : ''}`;
+  const did = driveFolderId(g.sourceUrl || '');
   openModal(`
-    <div class="modal-head"><h3>Tạo Album Chọn Ảnh — ${esc(custName(b.customerId))}</h3><button class="icon-btn" onclick="closeModal()">${icon('x')}</button></div>
-    <div class="modal-body" style="max-height:64vh;overflow-y:auto">
-      <div style="display:flex;gap:14px;flex-wrap:wrap">
-        <div style="flex:1;min-width:300px">
-          ${sec('1. Nguồn Link Ảnh', 'pin', `
-            <input class="input" id="galSource" value="${esc(g.sourceUrl || '')}" placeholder="Dán link thư mục Google Drive hoặc NAS...">
-            <div style="display:flex;gap:8px;margin-top:8px">
-              <button class="btn btn-ghost btn-sm" style="flex:1" onclick="scanIntoGallery('${b.id}')">${icon('refresh')} Quét Ảnh từ thư mục</button>
-              <input class="input" id="galCount" type="number" min="1" max="500" value="30" style="width:76px" title="Số ảnh nếu sinh mẫu">
-              <button class="btn btn-ghost btn-sm" onclick="genGalleryPhotos('${b.id}')" title="Sinh danh sách mã A01...">Sinh mẫu</button>
-            </div>`)}
-          ${sec('2. Thông Tin Khách &amp; Album', 'user', `
-            <div class="field"><label>Tiêu đề Album</label><input class="input" id="galTitle" value="${esc(g.title || '')}" placeholder="VD: Cưới ${esc(shortName(cust.name || ''))} &amp; ${esc(shortName(''))}"></div>
-            <div class="info-grid">${infoItem('user', 'Khách hàng', cust.name)}${infoItem('phone', 'SĐT / Zalo', cust.phone)}${infoItem('calendar', 'Ngày tạo', fmtDate(todayStr()))}${infoItem('clock', 'Ngày chụp', fmtDate(b.date))}</div>`)}
-          ${sec('3. Số Lượng Chọn &amp; Giá Ảnh Thêm', 'lock', `
-            <div class="field"><label>Số lượng ảnh trong gói (0 = không giới hạn)</label>
-              <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:7px">
-                ${[0, 5, 10, 15, 20, 25, 30, 40, 50].map(n => `<button class="btn btn-sm ${(+g.includedQty || 0) === n ? 'btn-primary' : 'btn-ghost'}" style="padding:5px 11px" onclick="setQty(${n})">${n || '∞'}</button>`).join('')}
+    <div class="modal-head"><h3>Tạo Link Chọn Ảnh ❤ — ${esc(custName(b.customerId))}</h3><button class="icon-btn" onclick="closeModal()">${icon('x')}</button></div>
+    <div class="modal-body" style="max-height:66vh;overflow-y:auto">
+      <div style="display:flex;gap:16px;flex-wrap:wrap">
+        <div style="flex:1.4;min-width:300px">
+          <div class="field"><label>${icon('pin')} BƯỚC 1 — Dán link thư mục Google Drive chứa ảnh</label>
+            <input class="input" id="galSource" style="font-size:13px" value="${esc(g.sourceUrl || '')}" placeholder="https://drive.google.com/drive/folders/..." oninput="galDriveHint(this.value)">
+            <div class="form-hint" id="galDriveHint">${did ? '✓ Link Drive hợp lệ — khách sẽ xem được ảnh ngay trong link chọn' : 'Trên Drive: chuột phải thư mục ảnh → Chia sẻ → "Ai có link" → Copy link'}</div>
+            <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+              <button class="btn btn-ghost btn-sm" onclick="scanIntoGallery('${b.id}')" title="Lấy mã ảnh từ thư mục máy/NAS thay vì gõ">${icon('refresh')} Quét mã ảnh từ thư mục máy</button>
+            </div>
+          </div>
+          <div class="field"><label>${icon('package')} BƯỚC 2 — Số lượng ảnh để khách thả tim</label>
+            <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:7px">
+              ${[20, 30, 40, 50, 80, 100].map(n => `<button class="btn btn-sm ${(g.photos.length || 30) === n ? 'btn-primary' : 'btn-ghost'}" style="padding:5px 11px" onclick="$('#galCount').value=${n};galGenPreview()">${n}</button>`).join('')}
+            </div>
+            <input class="input" id="galCount" type="number" min="1" max="500" value="${g.photos.length || 30}" oninput="galGenPreview()" style="width:110px">
+            <div class="form-hint">Mã ảnh tự sinh A01, A02… khớp tên file trên Drive (đặt tên file A01.jpg, A02.jpg… để lọc ảnh sau này)</div>
+          </div>
+          <details style="margin-top:6px">
+            <summary style="cursor:pointer;font-size:12.5px;font-weight:700;color:var(--text-2)">⚙ Tuỳ chọn nâng cao (PIN, giá ảnh thêm, lời chào…)</summary>
+            <div style="margin-top:10px">
+              <div class="form-grid">
+                <div class="field"><label>Tiêu đề album</label><input class="input" id="galTitle" value="${esc(g.title || '')}" placeholder="VD: Album Cưới — ${esc(shortName(cust.name || ''))}"></div>
+                <div class="field"><label>Mã PIN mở album</label><input class="input" id="galPin" inputmode="numeric" maxlength="6" value="${esc(g.pin || '')}" placeholder="Trống = không cần PIN"></div>
+                <div class="field"><label>Số ảnh gói (0 = ∞)</label><input class="input" id="galQty" type="number" min="0" value="${+g.includedQty || 0}"></div>
+                <div class="field"><label>Giá ảnh thêm (₫/ảnh)</label><input class="input" id="galPrice" type="number" min="0" step="10000" value="${+g.extraPrice || 0}"></div>
               </div>
-              <input class="input" id="galQty" type="number" min="0" value="${+g.includedQty || 0}"></div>
-            <div class="field"><label>Giá ảnh chọn thêm (₫/ảnh)</label><input class="input" id="galPrice" type="number" min="0" step="10000" value="${+g.extraPrice || 0}"></div>
-            <div class="field"><label>Mã PIN mở album</label><input class="input" id="galPin" inputmode="numeric" maxlength="6" value="${esc(g.pin || '')}" placeholder="Để trống nếu không đặt PIN"></div>`)}
-          ${sec('4. Watermark &amp; Tải Ảnh', 'package', `
-            ${chk('galWatermark', 'Đóng dấu Watermark bảo vệ ảnh', g.watermark)}
-            ${chk('galDownload', 'Cho phép khách tải ảnh / mở thư mục gốc', g.allowDownload)}`)}
-          ${sec('5. Tương Tác &amp; Giao Diện Khách Hàng', 'check', `
-            ${chk('galAllow', 'Bật chọn ảnh bằng Trái Tim ❤', g.allowSelect)}
-            ${chk('galNotes', 'Cho phép khách ghi chú từng ảnh', g.allowNotes !== false)}
-            ${chk('galSubmit', 'Bật nút "Gửi Studio" cho khách gửi ảnh đã chọn', g.allowSubmit !== false, 'Tắt nếu chỉ gửi link cho khách xem album mà không cần chốt gửi lại')}
-            <div class="field" style="margin-top:8px"><label>Lời chào &amp; hướng dẫn cho khách</label>
-              <textarea class="textarea" id="galGreeting" placeholder="VD: Chào anh chị! Anh chị thả tim ❤ chọn 30 ảnh ưng ý nhất cho album nhé ạ...">${esc(g.greeting || '')}</textarea>
-              <div class="form-hint">Hiển thị trang trọng ở đầu trang khi khách mở link album</div></div>`)}
+              <div class="checkbox-row" style="margin:6px 0"><input type="checkbox" id="galWatermark" ${g.watermark ? 'checked' : ''}><label for="galWatermark">Watermark tên studio</label></div>
+              <div class="checkbox-row" style="margin:6px 0"><input type="checkbox" id="galAllow" ${g.allowSelect !== false ? 'checked' : ''}><label for="galAllow">Bật thả tim chọn ảnh ❤</label></div>
+              <div class="checkbox-row" style="margin:6px 0"><input type="checkbox" id="galNotes" ${g.allowNotes !== false ? 'checked' : ''}><label for="galNotes">Cho khách ghi chú từng ảnh</label></div>
+              <div class="checkbox-row" style="margin:6px 0"><input type="checkbox" id="galSubmit" ${g.allowSubmit !== false ? 'checked' : ''}><label for="galSubmit">Nút "Gửi Studio"</label></div>
+              <div class="checkbox-row" style="margin:6px 0"><input type="checkbox" id="galDownload" ${g.allowDownload ? 'checked' : ''}><label for="galDownload">Cho khách mở thư mục Drive gốc</label></div>
+              <div class="field"><label>Lời chào khách</label><textarea class="textarea" id="galGreeting" style="min-height:56px" placeholder="Chào anh chị! Thả tim ${+g.includedQty || 30} ảnh ưng ý nhất nhé ạ...">${esc(g.greeting || '')}</textarea></div>
+            </div>
+          </details>
         </div>
         <div style="flex:1;min-width:250px">
-          <div class="card" style="padding:15px;position:sticky;top:0">
-            <div class="cell-main" style="margin-bottom:10px">${icon('camera')} Xem Trước Album</div>
-            <div class="field"><label>Link cổng khách hàng</label>
-              <div style="display:flex;gap:6px"><input class="input" id="galUrl" readonly value="${esc(url)}">
-              <button class="btn btn-ghost btn-sm" onclick="copyPortalUrl()">Copy</button></div>
-              <button class="btn btn-ghost btn-sm btn-block" style="margin-top:6px" onclick="viewBooking('${b.id}');openPortalNow('${b.id}')">👁 Xem thử giao diện khách</button></div>
-            ${g.photos.length ? `
-              <div class="cell-sub" style="margin:8px 0">Album: <b>${g.photos.length} ảnh</b> · khách đã tim <b style="color:#e11d48">${selCount}</b>${g.includedQty ? ' / gói ' + g.includedQty : ''}${g.pin ? ' · 🔒 PIN' : ''}</div>
-              <div class="photo-grid" style="grid-template-columns:repeat(3,1fr);max-height:210px;overflow-y:auto;padding:2px">
-                ${g.photos.slice(0, 60).map(p => `<div class="photo-tile ${p.selected ? 'sel' : ''}" style="padding:7px 4px"><div class="pc">${esc(p.code)}</div><div class="tick">${p.selected ? '❤' : ''}</div></div>`).join('')}
-              </div>` : `<div class="k-empty-hint" style="margin-top:8px">Dán link / quét thư mục hoặc bấm "Sinh mẫu" để tạo album</div>`}
-              <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap">
-                <button class="btn btn-ghost btn-sm" style="flex:1" onclick="copySelectedCodes('${b.id}')">${icon('receipt')} Copy ${selCount} mã đã chọn</button>
-                <button class="btn btn-ghost btn-sm" style="flex:1" onclick="openPhotoFilterTool('${b.id}')">${icon('download')} Lọc ảnh gốc → thư mục</button>
-              </div>
+          <div class="card" style="padding:15px;position:sticky;top:0;border-color:#fde68a;background:#fffbeb">
+            <div class="cell-main" style="margin-bottom:10px">${icon('camera')} BƯỚC 3 — Gửi link này cho khách</div>
+            <div style="display:flex;gap:6px"><input class="input" id="galUrl" readonly value="${esc(url)}" style="font-size:11.5px">
+            <button class="btn btn-primary btn-sm" style="flex:none" onclick="copyPortalUrl()">${icon('receipt')} Copy</button></div>
+            <button class="btn btn-ghost btn-sm btn-block" style="margin-top:8px" onclick="openPortalNow('${b.id}')">👁 Xem thử trang khách sẽ thấy</button>
+            <div class="cell-sub" style="margin-top:10px">Khách đã tim <b style="color:#e11d48">${selCount}</b>/${g.photos.length || '?'} ảnh${g.pin ? ' · 🔒 PIN' : ''}</div>
+            <div class="photo-grid" style="grid-template-columns:repeat(4,1fr);max-height:150px;overflow-y:auto;padding:2px;margin-top:6px">
+              ${g.photos.slice(0, 60).map(p => `<div class="photo-tile ${p.selected ? 'sel' : ''}" style="padding:5px 2px"><div class="pc" style="font-size:10px">${esc(p.code)}</div></div>`).join('')}
+            </div>
+            <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap">
+              <button class="btn btn-ghost btn-sm" style="flex:1" onclick="copySelectedCodes('${b.id}')">${icon('receipt')} Copy mã đã tim</button>
+              <button class="btn btn-ghost btn-sm" style="flex:1" onclick="openPhotoFilterTool('${b.id}')">${icon('download')} Lọc ảnh gốc</button>
+            </div>
           </div>
         </div>
       </div>
     </div>
     <div class="modal-foot">
-      <button class="btn btn-ghost" onclick="closeModal()">Hủy Bỏ</button>
-      <button class="btn btn-primary" onclick="saveGallery('${b.id}')">${icon('check')} Lưu Album Ngay (${g.photos.length} ảnh)</button>
+      <button class="btn btn-ghost" onclick="closeModal()">Đóng</button>
+      <button class="btn btn-primary" onclick="saveGallery('${b.id}')">${icon('check')} Tạo Link Chọn Ảnh</button>
     </div>`, 'lg');
 }
 
-function setQty(n) { const el = $('#galQty'); if (el) el.value = n; }
+function galDriveHint(v) {
+  const el = $('#galDriveHint');
+  if (el) el.innerHTML = driveFolderId(v) ? '✓ Link Drive hợp lệ — khách sẽ xem được ảnh ngay trong link chọn' : 'Chưa nhận dạng được thư mục Drive — kiểm tra link dạng drive.google.com/drive/folders/…';
+}
+function galGenPreview() { /* cập nhật số trên nút lưu khi đổi số lượng */ const el = document.querySelector('#modalRoot .modal-foot .btn-primary'); if (el) el.innerHTML = `${icon('check')} Tạo Link Chọn Ảnh (${Math.min(500, Math.max(1, +(($('#galCount') || {}).value || 30)))} ảnh)`; }
 
 async function scanIntoGallery(bookingId) {
   const b = byId(state.bookings, bookingId);
@@ -5814,7 +5825,12 @@ function saveGallery(bookingId, reopen) {
   g.allowSubmit = $('#galSubmit') ? $('#galSubmit').checked : g.allowSubmit !== false;
   g.greeting = $('#galGreeting') ? $('#galGreeting').value.trim() : (g.greeting || '');
   const srcEl = $('#galSource');
-  if (srcEl) g.sourceUrl = srcEl.value.trim();
+  if (srcEl) { g.sourceUrl = srcEl.value.trim(); g.driveId = driveFolderId(g.sourceUrl); }
+  // Chưa có mã ảnh → tự sinh theo số lượng đã nhập
+  if (!b.gallery.photos.length && $('#galCount')) {
+    const n = Math.min(500, Math.max(1, +$('#galCount').value || 30));
+    b.gallery.photos = Array.from({ length: n }, (_, i) => ({ id: uid(), code: 'A' + pad(i + 1), name: 'Ảnh ' + pad(i + 1), selected: false }));
+  }
   const tiles = $$('#modalRoot .photo-tile');
   if (tiles.length) {
     const selCodes = new Set($$('#modalRoot .photo-tile.sel').map(t => t.querySelector('.pc').textContent));
@@ -5839,6 +5855,16 @@ function openPortalNow(bookingId) {
 }
 
 let __portalRemote = null; // {token, data} — portal đang xem từ server (máy không có dữ liệu local)
+
+const driveEmbedHtml = (g, d) => {
+  const id = g.driveId || driveFolderId(g.sourceUrl || '');
+  if (!id) return '';
+  return `<div class="portal-card">
+    <h3>📁 Ảnh của bạn (Google Drive)</h3>
+    <p style="font-size:12.5px;color:var(--text-2);margin-bottom:10px">Duyệt ảnh thật trong khung dưới — thấy ảnh nào ưng thì xuống phần <b>Thả tim ❤</b> bấm chọn mã ảnh tương ứng nhé${g.allowDownload ? ` · <a class="link" href="${esc(g.sourceUrl)}" target="_blank" rel="noopener">mở thư mục Drive</a>` : ''}.</p>
+    <iframe src="https://drive.google.com/embeddedfolderview?id=${esc(id)}#grid" style="width:100%;height:460px;border:1px solid var(--border);border-radius:12px;background:#fafaf9" loading="lazy" title="Ảnh Google Drive"></iframe>
+  </div>`;
+};
 
 async function renderPortalScreen(token) {
   const b = state.bookings.find(x => x.portalToken === token);
@@ -5892,6 +5918,7 @@ async function renderPortalScreen(token) {
       <div class="pay-progress"><div style="width:${orderTotal(o) ? Math.min(100, Math.round((+o.paidAmount || 0) / orderTotal(o) * 100)) : 0}%"></div></div>
       <div class="pay-legend"><span>Đã thanh toán <b>${fmtMoney(+o.paidAmount || 0)}</b></span><span>Còn lại <b style="color:${orderRemaining(o) > 0 ? 'var(--red)' : 'var(--green)'}">${fmtMoney(orderRemaining(o))}</b></span></div>
     </div>` : ''}
+    ${driveEmbedHtml(b.gallery)}
     <div class="portal-card">
       <h3>${b.gallery.title ? esc(b.gallery.title) : 'Chọn ảnh cần chỉnh sửa'} ${photos.length ? `(${selCount}/${photos.length}${b.gallery.includedQty ? ' · gói ' + b.gallery.includedQty : ''} đã chọn)` : ''}</h3>
       ${b.gallery.includedQty && selCount > b.gallery.includedQty ? `<div class="auth-error" style="display:flex;background:#fffbeb;border-color:#fde68a;color:#92400e">⚠ Bạn đã chọn vượt ${selCount - b.gallery.includedQty} ảnh so với gói${b.gallery.extraPrice ? ' — phụ thu ' + fmtMoney((selCount - b.gallery.includedQty) * b.gallery.extraPrice) : ''}. Có thể bỏ bớt tim nếu muốn.</div>` : ''}
@@ -5976,6 +6003,7 @@ async function renderPortalRemote(token) {
       <div class="pay-progress"><div style="width:${d.pay.total ? Math.min(100, Math.round(d.pay.paid / d.pay.total * 100)) : 0}%"></div></div>
       <div class="pay-legend"><span>Đã thanh toán <b>${fmtMoney(d.pay.paid)}</b></span><span>Còn lại <b style="color:${remain > 0 ? 'var(--red)' : 'var(--green)'}">${fmtMoney(remain)}</b></span></div>
     </div>` : ''}
+    ${driveEmbedHtml(g)}
     <div class="portal-card">
       <h3>${g.title ? esc(g.title) : 'Chọn ảnh cần chỉnh sửa'} ${photos.length ? `(${selCount}/${photos.length}${g.includedQty ? ' · gói ' + g.includedQty : ''} đã chọn)` : ''}</h3>
       ${g.includedQty && selCount > g.includedQty ? `<div class="auth-error" style="display:flex;background:#fffbeb;border-color:#fde68a;color:#92400e">⚠ Bạn đã chọn vượt ${selCount - g.includedQty} ảnh so với gói${g.extraPrice ? ' — phụ thu ' + fmtMoney((selCount - g.includedQty) * g.extraPrice) : ''}. Có thể bỏ bớt tim nếu muốn.</div>` : ''}
