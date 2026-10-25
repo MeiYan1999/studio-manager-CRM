@@ -76,9 +76,10 @@ const SHIFTS = {
 const shiftOf = s => SHIFTS[(s && s.shift) || 'normal'] || SHIFTS.normal;
 
 // ---- Nhật ký cập nhật (changelog) ----
-const APP_VERSION = '3.2';
+const APP_VERSION = '3.3';
 const CL_KIND = { new: ['✨ mới', 'b-delivered'], fix: ['🐛 sửa lỗi', 'b-unpaid'], ui: ['🎨 giao diện', 'b-deposit'], imp: ['⚡ nâng cấp', 'b-confirmed'] };
 const CHANGELOG = [
+  { v: '3.3', d: '26/10/2026', items: [['new', 'Cổng thanh toán SePay: webhook biến động số dư — giao dịch về hiện ngay trong Thu chi, tự đối soát đơn (khớp mã ĐH/số tiền), toast + thông báo tiền về'], ['new', 'Nhắn Tin kiểu Pancake: phân loại hội thoại (Chờ trả lời/Đã trả lời/Xong), gắn thẻ khách (Khách mới, Đã báo giá, Chờ cọc…), quản lý mẫu tin nhắn riêng']] },
   { v: '3.2', d: '26/10/2026', items: [['new', 'Mục Nhắn Tin: hội thoại Zalo / Facebook Fanpage — danh sách trò chuyện, bong bóng chat, mẫu trả lời nhanh, gửi link chọn ảnh cho khách, kết nối kênh (chờ token OA/Fanpage)']] },
   { v: '3.1', d: '26/10/2026', items: [['new', 'Mục "Nhật ký cập nhật" trong Hệ thống — xem app đã thay đổi gì theo từng phiên bản']] },
   { v: '3.0', d: '26/10/2026', items: [['new', 'Đính kèm ảnh (biên lai, hóa đơn, chứng từ) cho Thu chi, Chi phí và Đơn hàng — tự nén nhẹ, xem phóng to, tối đa 4 ảnh']] },
@@ -160,7 +161,7 @@ function blankState() {
     outfits: [], concepts: [], loans: [],
     users: [],
     logs: [],
-    expenses: [], payrolls: [], contracts: [], cash: [], shiftPlan: {}, shiftNotes: {}, chats: [],
+    expenses: [], payrolls: [], contracts: [], cash: [], shiftPlan: {}, shiftNotes: {}, chats: [], msgTemplates: [], payments: [],
     attendance: [],
     departments: [], roleGroups: [],
     notifications: [],
@@ -211,7 +212,7 @@ function save() {
 }
 
 let __galleryTouchedAt = 0; // studio vừa sửa album thì 3 phút đầu ưu tiên bản local
-let __lastVer = null, __pollTimer = null;
+let __lastVer = null, __pollTimer = null, __seenPayIds = new Set();
 
 // Chế độ online: tự kéo dữ liệu mới từ server mỗi 15 giây (máy khác sửa → máy này cập nhật)
 let __presenceList = {}; // userId -> lastSeen ISO
@@ -284,6 +285,15 @@ function startServerPoll() {
       if (!j.v) return;
       if (__lastVer && String(j.v) !== String(__lastVer)) {
         const st = await loadFromServer();
+        // Giao dịch SePay mới → hiện thông báo nổi trên màn hình
+        const payIds = ((st && st.payments) || []).map(p => p.id);
+        if (__seenPayIds.size) {
+          payIds.filter(id => !__seenPayIds.has(id)).slice(-3).forEach(id => {
+            const p = (st.payments || []).find(x => x.id === id);
+            if (p) toast(`💰 ${fmtMoney(p.amount)} vừa chuyển khoản — ${p.orderId ? (byId(st.orders, p.orderId) || {}).code || 'đã khớp đơn' : 'chưa khớp đơn, kiểm tra Thu chi'}`);
+          });
+        }
+        payIds.forEach(id => __seenPayIds.add(id));
         adoptState(st);
         __lastVer = j.v;
         const mr = document.getElementById('modalRoot');
@@ -354,6 +364,12 @@ function migrateLegacy(parsed) {
   if (!p.shiftPlan) { state.shiftPlan = {}; changed = true; }
   if (!p.shiftNotes) { state.shiftNotes = {}; changed = true; }
   if (!Array.isArray(p.chats)) { state.chats = seedChats(); changed = true; }
+  if (!Array.isArray(p.msgTemplates) || !p.msgTemplates.length) { state.msgTemplates = MSG_TEMPLATES.slice(); changed = true; }
+  if (!Array.isArray(p.payments)) { state.payments = []; changed = true; }
+  state.chats.forEach(c => {
+    if (!c.status) { const last = (c.msgs[c.msgs.length - 1] || {}).from; c.status = last === 'me' ? 'replied' : 'pending'; changed = true; }
+    if (!Array.isArray(c.tags)) { c.tags = []; changed = true; }
+  });
   (state.users || []).forEach(u => { if (Array.isArray(u.perms) && u.perms.includes('shifts') && !u.perms.includes('shiftplan')) { u.perms.push('shiftplan'); changed = true; } });
   if (!Array.isArray(p.contracts)) { state.contracts = seedContracts(); state.contractSeq = 1003; changed = true; }
   else if (!p.contractSeq) state.contractSeq = 1003;
@@ -2621,7 +2637,7 @@ function settingsView() {
     + group('Tài chính & Thanh toán',
       card('money', 'tint-green', 'Mục tiêu doanh số', 'Đặt mục tiêu doanh thu tháng cho từng nhân sự và theo dõi tiến độ tự động từ đơn hàng.', btn('Thiết lập', 'openTargetsModal()'))
       + card('card', 'tint-green', 'Thanh toán QR (VietQR)', `Tài khoản nhận tiền: <b>${bankCfg().accountNo ? bankLabel(bankCfg()) + ' · ' + esc(bankCfg().accountNo) : 'chưa cấu hình'}</b>. Sinh QR đúng số tiền + mã đơn — khách quét chuyển khoản bằng app ngân hàng.`, btn('Cấu hình', 'openBankQrModal()'))
-      + card('card', 'tint-red', 'Kết nối SePay (biến động số dư)', 'Nhận biến động số dư ngân hàng vào ví của studio theo thời gian thực.', '', true)
+      + card('card', 'tint-red', 'Kết nối SePay (biến động số dư)', 'Nhận biến động số dư ngân hàng theo thời gian thực — giao dịch nào về sẽ hiện ngay trong mục Thu chi, tự đối soát đơn hàng.', btn('Mở', 'openSepayModal()'))
     )
     + group('Dữ liệu & Tích hợp',
       card('download', 'tint-violet', 'Sao lưu & Khôi phục', `Xuất/nhập backup JSON, khôi phục dữ liệu mẫu, xóa dữ liệu. Tự động tải backup mỗi ngày.${st.autoBackup && st.lastBackupAt ? '<br>Lần cuối: ' + fmtDate(st.lastBackupAt) : ''}`, btn('Mở', 'openBackupModal()'))
@@ -4487,6 +4503,13 @@ const CHAN = {
   fb: { label: 'Facebook', color: '#0866FF', bg: '#e7efff' },
   web: { label: 'Web', color: '#059669', bg: '#e6f7f1' },
 };
+// Phân loại + thẻ hội thoại (kiểu Pancake)
+const CHAT_STATUS = {
+  pending: { label: 'Chờ trả lời', color: '#b45309', bg: '#fef3c7' },
+  replied: { label: 'Đã trả lời', color: '#1d4ed8', bg: '#dbeafe' },
+  done:    { label: 'Xong', color: '#047857', bg: '#d1fae5' },
+};
+const CHAT_TAGS = ['Khách mới', 'Đã báo giá', 'Chờ cọc', 'Đã chốt lịch', 'Khách VIP', 'Hỏi lại sau', 'Spam'];
 const MSG_TEMPLATES = [
   'Xin chào {name}! Studio cảm ơn bạn đã quan tâm dịch vụ chụp 📸',
   'Dạ báo giá gói {gói} hiện tại là …đ — đã bao gồm …Bạn cần em gửi chi tiết không ạ?',
@@ -4499,19 +4522,19 @@ let __openChat = null;
 function seedChats() {
   const t = Date.now(), mm = n => new Date(t - n * 60000).toISOString();
   return [
-    { id: uid(), channel: 'zalo', name: 'Nguyễn Ngọc Anh', phone: '0901 222 333', lastRead: mm(1),
+    { id: uid(), channel: 'zalo', name: 'Nguyễn Ngọc Anh', phone: '0901 222 333', lastRead: mm(1), status: 'pending', tags: ['Đã báo giá'],
       msgs: [
         { from: 'them', text: 'Chào studio, mình muốn hỏi gói chụp gia đình 4 người giá bao nhiêu ạ?', ts: mm(24) },
         { from: 'me', text: 'Chào chị Anh 👋 Gói gia đình 4 người là 3.500.000đ — gồm 60 ảnh chỉnh sửa, 1 bộ áo và album 20×30. Chị đặt lịch tuần này studio ưu tiên tặng thêm 5 ảnh ạ!', ts: mm(21) },
         { from: 'them', text: 'A ơi cho em hỏi giá gói chụp mẹ và bé với ạ, bé nhà em được 8 tháng', ts: mm(3) },
       ] },
-    { id: uid(), channel: 'fb', name: 'Trần Minh Quân', phone: '0938 555 111', lastRead: mm(60),
+    { id: uid(), channel: 'fb', name: 'Trần Minh Quân', phone: '0938 555 111', lastRead: mm(60), status: 'replied', tags: ['Chờ cọc'],
       msgs: [
         { from: 'them', text: 'Fanpage ơi, tháng 11 còn lịch chụp couples không?', ts: mm(150) },
         { from: 'me', text: 'Dạ còn anh nhé! Anh ghim lịch thứ 7 hoặc CN đều được ạ 📅', ts: mm(140) },
         { from: 'them', text: 'OK để anh bàn với người yêu rồi chốt nhé', ts: mm(138) },
       ] },
-    { id: uid(), channel: 'zalo', name: 'Lê Thị Hồng Vân', phone: '0977 888 999', lastRead: mm(200),
+    { id: uid(), channel: 'zalo', name: 'Lê Thị Hồng Vân', phone: '0977 888 999', lastRead: mm(200), status: 'done', tags: ['Khách VIP'],
       msgs: [
         { from: 'them', text: 'Ảnh đã nhận rồi, đẹp lắm ạ, cảm ơn studio nhiều!', ts: mm(400) },
         { from: 'me', text: 'Studio rất vui khi chị hài lòng ạ 🥰 Nhớ đánh giá 5⭐ giúp studio nhé chị!', ts: mm(395) },
@@ -4531,19 +4554,33 @@ function msgTime(ts) {
 }
 
 function chatsView() {
-  const v = viewState.chats = viewState.chats || { q: '', chan: 'all' };
+  const v = viewState.chats = viewState.chats || { q: '', chan: 'all', tag: '', status: '' };
   const list = state.chats
     .filter(c => v.chan === 'all' || c.channel === v.chan)
+    .filter(c => !v.tag || (c.tags || []).includes(v.tag))
+    .filter(c => !v.status || c.status === v.status)
     .filter(c => !v.q || [c.name, c.phone].some(x => String(x || '').toLowerCase().includes(v.q.trim().toLowerCase())))
     .sort((a, b) => (b.msgs[b.msgs.length - 1] || {}).ts.localeCompare((a.msgs[a.msgs.length - 1] || {}).ts));
   const cur = __openChat && state.chats.find(c => c.id === __openChat);
   const totalUnread = state.chats.reduce((s, c) => s + chatUnread(c), 0);
+  const pending = state.chats.filter(c => c.status === 'pending').length;
   const chanBtn = k => `<button class="${v.chan === k ? 'active' : ''}" onclick="viewState.chats.chan='${k}';render()">${k === 'all' ? 'Tất cả' : CHAN[k].label}</button>`;
+  const tagChipHtml = (t, i) => `<span class="msg-tag" style="background:${i === undefined ? '#f1f5f9' : ['#fef3c7', '#dbeafe', '#d1fae5', '#ede9fe', '#fce7f3', '#e0f2fe', '#f1f5f9'][i % 7]}">${esc(t)}</span>`;
   return `
   <div class="toolbar">
     <div class="pill-toggle">${chanBtn('all')}${chanBtn('zalo')}${chanBtn('fb')}${chanBtn('web')}</div>
-    <span class="badge b-unpaid">${totalUnread} tin chưa đọc</span>
+    <select class="select" style="width:auto" title="Lọc theo phân loại" onchange="viewState.chats.status=this.value;render()">
+      <option value="">Mọi trạng thái</option>
+      ${Object.entries(CHAT_STATUS).map(([k, s]) => `<option value="${k}" ${v.status === k ? 'selected' : ''}>${s.label}${state.chats.filter(c => c.status === k).length ? ' (' + state.chats.filter(c => c.status === k).length + ')' : ''}</option>`).join('')}
+    </select>
+    <select class="select" style="width:auto" title="Lọc theo thẻ" onchange="viewState.chats.tag=this.value;render()">
+      <option value="">Mọi thẻ</option>
+      ${CHAT_TAGS.map(t => `<option value="${t}" ${v.tag === t ? 'selected' : ''}>🏷 ${t}</option>`).join('')}
+    </select>
+    <span class="badge b-unpaid">${totalUnread} chưa đọc</span>
+    <span class="badge" style="background:${CHAT_STATUS.pending.bg};color:${CHAT_STATUS.pending.color}">${pending} chờ trả lời</span>
     <div class="spacer"></div>
+    <button class="btn btn-ghost" onclick="openTemplatesModal()" title="Quản lý mẫu tin nhắn">${icon('receipt')} Mẫu tin nhắn</button>
     <button class="btn btn-ghost" onclick="openChatConnModal()" title="Kết nối Fanpage / Zalo OA">${icon('card')} Kết nối kênh</button>
     <button class="btn btn-primary" onclick="openChatModal()">${icon('plus')} Hội thoại mới</button>
   </div>
@@ -4555,17 +4592,18 @@ function chatsView() {
       ${list.map(c => {
         const u = chatUnread(c), last = c.msgs[c.msgs.length - 1] || {};
         const ch = CHAN[c.channel] || CHAN.web;
+        const st = CHAT_STATUS[c.status] || CHAT_STATUS.pending;
         return `<div class="msg-row ${cur && cur.id === c.id ? 'cur' : ''}" onclick="openChat('${c.id}')">
           <div class="avatar" style="background:${ch.bg};color:${ch.color};flex:none">${esc(initials(c.name))}</div>
           <div style="flex:1;min-width:0">
             <div style="display:flex;align-items:center;gap:6px">
               <b style="font-size:13px;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(c.name)}</b>
+              <span class="msg-status" style="background:${st.bg};color:${st.color}">${st.label}</span>
               <span class="cell-sub" style="flex:none">${msgTime(last.ts || '')}</span>
-            </div>
-            <div style="display:flex;align-items:center;gap:6px">
-              <span class="cell-sub" style="flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${last.from === 'me' ? 'Bạn: ' : ''}${esc((last.text || '').slice(0, 60))}</span>
               ${u ? `<span class="msg-dot">${u}</span>` : ''}
             </div>
+            <div class="cell-sub" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${last.from === 'me' ? 'Bạn: ' : ''}${esc((last.text || '').slice(0, 46))}</div>
+            ${(c.tags || []).length ? `<div style="display:flex;gap:4px;margin-top:4px;flex-wrap:wrap">${c.tags.slice(0, 2).map(t => `<span class="msg-tag">${esc(t)}</span>`).join('')}${c.tags.length > 2 ? `<span class="msg-tag" style="background:#f1f5f9">+${c.tags.length - 2}</span>` : ''}</div>` : ''}
           </div>
         </div>`;
       }).join('') || `<div style="padding:30px;text-align:center" class="cell-sub">Chưa có hội thoại nào</div>`}
@@ -4581,15 +4619,23 @@ function chatsView() {
 function chatPaneHtml(c) {
   const ch = CHAN[c.channel] || CHAN.web;
   const cust = (c.customerId && byId(state.customers, c.customerId)) || null;
+  const st = c.status || 'pending';
   return `
   <div class="msg-head">
     <div class="avatar" style="background:${ch.bg};color:${ch.color}">${esc(initials(c.name))}</div>
     <div style="flex:1;min-width:0">
       <b style="font-size:13.5px">${esc(c.name)}</b>
       <div class="cell-sub">${ch.label}${c.phone ? ' · ' + esc(c.phone) : ''}${cust ? ' · đã liên kết khách hàng' : ''}</div>
+      <div style="display:flex;gap:4px;margin-top:5px;flex-wrap:wrap">
+        ${(c.tags || []).map(t => `<span class="msg-tag">${esc(t)} <a style="color:inherit;margin-left:2px" onclick="toggleChatTag('${c.id}','${esc(t)}')">×</a></span>`).join('')}
+        <a class="msg-tag msg-tag-add" onclick="openTagsModal('${c.id}')">＋ thẻ</a>
+      </div>
     </div>
+    <select class="select" style="width:auto;font-size:11.5px;font-weight:700;color:${(CHAT_STATUS[st] || CHAT_STATUS.pending).color};background:${(CHAT_STATUS[st] || CHAT_STATUS.pending).bg}" onchange="setChatStatus('${c.id}',this.value)" title="Phân loại hội thoại">
+      ${Object.entries(CHAT_STATUS).map(([k, s]) => `<option value="${k}" ${st === k ? 'selected' : ''}>${s.label}</option>`).join('')}
+    </select>
     ${c.phone ? `<a class="btn btn-ghost btn-sm" style="text-decoration:none" target="_blank" rel="noopener" href="https://zalo.me/${(c.phone || '').replace(/\s/g, '')}" title="Mở Zalo">${icon('phone')} Zalo</a>` : ''}
-    <button class="btn btn-ghost btn-sm" onclick="linkChatCustomer('${c.id}')">${icon('users')} Liên kết</button>
+    <button class="btn btn-ghost btn-sm" onclick="linkChatCustomer('${c.id}')">${icon('users')}</button>
     <button class="icon-btn danger" title="Xóa hội thoại" onclick="deleteChat('${c.id}')">${icon('trash')}</button>
   </div>
   <div class="msg-stream" id="msgStream">
@@ -4600,9 +4646,9 @@ function chatPaneHtml(c) {
     </div>`).join('')}
   </div>
   <div class="msg-tools">
-    <select class="select" style="max-width:170px;font-size:11.5px" onchange="if(this.value){$('#msgInput').value=this.value.replace('{name}','${esc((c.name || '').split(' ').slice(-1)[0] || '')}');this.value='';$('#msgInput').focus()}">
+    <select class="select" style="max-width:190px;font-size:11.5px" onchange="if(this.value){$('#msgInput').value=this.value.replace('{name}','${esc((c.name || '').split(' ').slice(-1)[0] || '')}');this.value='';$('#msgInput').focus()}">
       <option value="">⚡ Mẫu trả lời nhanh…</option>
-      ${MSG_TEMPLATES.map(t => `<option value="${esc(t)}">${esc(t.slice(0, 42))}…</option>`).join('')}
+      ${(state.msgTemplates || []).map(t => `<option value="${esc(t)}">${esc(t.slice(0, 42))}…</option>`).join('')}
     </select>
     ${cust ? `<button class="btn btn-ghost btn-sm" onclick="sendChatLink('${c.id}','customer')" title="Gửi link cổng chọn ảnh cho khách">📷 Gửi link chọn ảnh</button>` : ''}
   </div>
@@ -4610,6 +4656,58 @@ function chatPaneHtml(c) {
     <input class="input" id="msgInput" placeholder="Nhập tin nhắn… (Enter để gửi)" onkeydown="if(event.key==='Enter')sendChatMsg('${c.id}')">
     <button class="btn btn-primary" onclick="sendChatMsg('${c.id}')">${icon('check')} Gửi</button>
   </div>`;
+}
+
+function setChatStatus(id, st) {
+  const c = byId(state.chats, id);
+  if (!c) return;
+  c.status = st;
+  save(); render();
+}
+
+function toggleChatTag(id, tag) {
+  const c = byId(state.chats, id);
+  if (!c) return;
+  c.tags = (c.tags || []).filter(t => t !== tag);
+  save(); render();
+}
+
+function openTagsModal(id) {
+  const c = byId(state.chats, id);
+  if (!c) return;
+  const tags = c.tags || [];
+  openModal(`
+    <div class="modal-head"><h3>Gắn thẻ — ${esc(c.name)}</h3><button class="icon-btn" onclick="closeModal()">${icon('x')}</button></div>
+    <div class="modal-body">
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        ${CHAT_TAGS.map(t => {
+          const on = tags.includes(t);
+          return `<button class="btn btn-sm ${on ? 'btn-primary' : 'btn-ghost'}" onclick="(function(){var c=byId(state.chats,'${id}');c.tags=c.tags||[];var i=c.tags.indexOf('${esc(t)}');i>=0?c.tags.splice(i,1):c.tags.push('${esc(t)}');save();openTagsModal('${id}')})()">${on ? '✓ ' : ''}${esc(t)}</button>`;
+        }).join('')}
+      </div>
+      <p class="form-hint" style="margin-top:10px">Bấm để gắn/bỏ thẻ. Lọc nhanh theo thẻ ở danh sách bên trái.</p>
+    </div>
+    <div class="modal-foot"><button class="btn btn-primary" onclick="closeModal();render()">Xong</button></div>`, 'sm');
+}
+
+function openTemplatesModal() {
+  openModal(`
+    <div class="modal-head"><h3>Mẫu tin nhắn</h3><button class="icon-btn" onclick="closeModal()">${icon('x')}</button></div>
+    <div class="modal-body">
+      <p style="font-size:12.5px;color:var(--text-2);margin-bottom:10px">Mỗi dòng là một mẫu. Dùng <b>{name}</b> để tự điền tên khách (VD: "Chào {name}!"). Hiện trong danh sách ⚡ Mẫu trả lời nhanh khi chat.</p>
+      <textarea class="textarea" id="tplList" style="min-height:260px;font-size:12.5px" placeholder="Mỗi dòng một mẫu tin nhắn…">${esc((state.msgTemplates || []).join('\n'))}</textarea>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal()">Đóng</button>
+      <button class="btn btn-primary" onclick="saveTemplates()">${icon('check')} Lưu mẫu</button>
+    </div>`, 'sm');
+}
+
+function saveTemplates() {
+  state.msgTemplates = ($('#tplList').value || '').split('\n').map(s => s.trim()).filter(Boolean);
+  logAction('update', 'chat', 'Cập nhật ' + state.msgTemplates.length + ' mẫu tin nhắn');
+  save(); closeModal(); render();
+  toast('Đã lưu ' + state.msgTemplates.length + ' mẫu tin nhắn');
 }
 
 function openChat(id) {
@@ -4628,6 +4726,7 @@ function sendChatMsg(id) {
   if (!c || !text) return;
   c.msgs.push({ from: 'me', text, ts: new Date().toISOString() });
   c.lastRead = new Date().toISOString();
+  if (c.status !== 'done') c.status = 'replied';
   logAction('create', 'chat', 'Trả lời ' + c.name + ' (' + (CHAN[c.channel] || CHAN.web).label + ')');
   save(); render();
   setTimeout(() => { const s = $('#msgStream'); if (s) s.scrollTop = s.scrollHeight; }, 60);
@@ -4744,6 +4843,70 @@ function saveChatConn() {
   save(); closeModal(); toast('Đã lưu cấu hình kết nối — sau khi deploy backend sẽ nhận tin thật');
 }
 
+/* ---- SePay: cổng thanh toán — giao dịch hiện trên màn hình ---- */
+function openSepayModal() {
+  const st = state.settings.sepay = state.settings.sepay || {};
+  const hook = location.origin + '/api/sepay-webhook' + (st.secret ? '?secret=' + encodeURIComponent(st.secret) : '');
+  openModal(`
+    <div class="modal-head"><h3>Kết nối SePay — biến động số dư ngân hàng</h3><button class="icon-btn" onclick="closeModal()">${icon('x')}</button></div>
+    <div class="modal-body">
+      <div class="auth-error" style="display:flex;background:#eff6ff;border-color:#bfdbfe;color:#1e40af;font-size:12.5px;line-height:1.6">
+        ℹ️ Cách hoạt động: khách chuyển khoản → SePay gửi webhook về app → giao dịch <b>hiện ngay</b> ở Tài chính → Thu chi, tự cộng tiền vào đơn nếu khớp mã ĐH hoặc đúng số tiền còn lại.</div>
+      <div class="field"><label>1️⃣ Đăng ký & liên kết ngân hàng tại sepay.vn (miễn phí)</label>
+        <p class="form-hint">Tạo tài khoản sepay.vn → thêm tài khoản ngân hàng của studio → bật thông báo biến động (SMS/Web/API).</p></div>
+      <div class="field"><label>2️⃣ Tạo Webhook trỏ về app — dán URL này</label>
+        <div style="display:flex;gap:8px">
+          <input class="input" id="spHook" readonly value="${esc(hook)}" onclick="this.select()">
+          <button class="btn btn-ghost btn-sm" onclick="copyText(document.getElementById('spHook').value,'Đã copy URL webhook')">${icon('receipt')} Copy</button>
+        </div>
+        <p class="form-hint">sepay.vn → Webhook → Thêm → dán URL trên → Loại giao dịch: <b>Cash in / tiền vào</b>.</p></div>
+      <div class="field"><label>3️⃣ Mã bí mật (secret) — bắt buộc khớp nếu điền</label>
+        <input class="input" id="spSecret" placeholder="VD: studiouuid123 (tùy bạn đặt)" value="${esc(st.secret || '')}">
+        <p class="form-hint">Nếu điền, thêm <b>?secret=mã_của_bạn</b> vào cuối URL webhook ở bước 2. Để trống nếu không cần.</p></div>
+      <p class="form-hint">⚠️ Webhook cần server online (bản Render) — trên localhost sẽ không nhận được từ SePay.</p>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal()">Đóng</button>
+      <button class="btn btn-primary" onclick="saveSepay()">${icon('check')} Lưu cấu hình</button>
+    </div>`, 'sm');
+}
+
+function saveSepay() {
+  state.settings.sepay = { secret: $('#spSecret').value.trim() };
+  logAction('update', 'settings', 'Cấu hình SePay webhook');
+  save(); closeModal(); openSepayModal();
+  toast('Đã lưu — copy lại URL webhook mới (có secret) dán vào sepay.vn');
+}
+
+function applyPayment(pid, orderId) {
+  const p = byId(state.payments, pid), o = byId(state.orders, orderId);
+  if (!p || !o) return;
+  o.paidAmount = (+o.paidAmount || 0) + (+p.amount || 0);
+  p.orderId = orderId; p.auto = true;
+  state.cash.push({ id: uid(), type: 'in', date: (p.ts || '').slice(0, 10), amount: +p.amount || 0, cat: 'Thu đơn hàng', method: 'Chuyển khoản', note: 'SePay — ' + (o.code || ''), orderId: o.id, by: (currentUser() || {}).name || '', photos: [] });
+  logAction('pay', 'order', o.code + ' đối soát SePay +' + fmtMoney(p.amount));
+  save(); closeModal(); render();
+  toast('Đã cộng ' + fmtMoney(p.amount) + ' vào ' + o.code);
+}
+
+function openLinkPaymentModal(pid) {
+  const p = byId(state.payments, pid);
+  if (!p) return;
+  openModal(`
+    <div class="modal-head"><h3>Liên kết giao dịch vào đơn</h3><button class="icon-btn" onclick="closeModal()">${icon('x')}</button></div>
+    <div class="modal-body">
+      <p style="font-size:13px;margin-bottom:10px"><b>${fmtMoney(p.amount)}</b> · ${esc(p.bank)} · ${esc((p.content || '').slice(0, 80))}</p>
+      <div class="field"><label>Chọn đơn hàng</label>
+        <select class="select" id="payOrd">
+          ${state.orders.slice().sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || '')).slice(0, 80).map(o => `<option value="${o.id}">${esc(o.code)} — ${esc(custName(o.customerId))} (còn ${fmtMoney(orderRemaining(o))})</option>`).join('')}
+        </select></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal()">Đóng</button>
+      <button class="btn btn-primary" onclick="applyPayment('${pid}', document.getElementById('payOrd').value)">${icon('check')} Cộng vào đơn</button>
+    </div>`, 'sm');
+}
+
 function compressImageFile(file) {
   return new Promise((res, rej) => {
     const r = new FileReader();
@@ -4841,9 +5004,32 @@ function cashTab() {
   </div>
   <div class="toolbar">
     <div class="pill-toggle">${tf('all')}${tf('in')}${tf('out')}</div>
+    <span class="badge b-deposit">💳 ${(state.payments || []).length} giao dịch SePay</span>
     <div class="spacer"></div>
     <button class="btn btn-primary" onclick="openCashModal()">${icon('plus')} Giao dịch thu/chi</button>
   </div>
+  ${(state.payments || []).length ? `
+  <div class="card list-wrap" style="margin-bottom:14px">
+    <div class="card-head"><h3>Giao dịch chuyển khoản tự động (SePay)</h3><span class="right badge b-confirmed">đối soát theo mã ĐH / số tiền</span></div>
+    <div class="table-wrap" style="max-height:260px;overflow-y:auto">
+    <table>
+      <thead><tr><th>Thời gian</th><th>Ngân hàng</th><th>Nội dung chuyển khoản</th><th class="ta-r">Số tiền</th><th>Đơn hàng</th><th></th></tr></thead>
+      <tbody>
+      ${state.payments.slice().reverse().slice(0, 30).map(p => {
+        const o = p.orderId ? byId(state.orders, p.orderId) : null;
+        return `<tr>
+          <td class="money-muted">${fmtDateTime(p.ts)}</td>
+          <td><span class="badge b-cat-khac">${esc(p.bank)}</span></td>
+          <td class="money-muted" style="max-width:260px">${esc((p.content || '').slice(0, 80))}</td>
+          <td class="money ta-r" style="color:var(--green)">+${fmtMoney(p.amount)}</td>
+          <td>${o ? `<a class="link" onclick="viewOrder('${o.id}')">${esc(o.code)}</a> ${p.auto ? '<span class="badge b-delivered">tự khớp</span>' : ''}` : '<span class="badge b-unpaid">chưa khớp</span>'}</td>
+          <td class="cell-actions ta-c">${!o ? `<button class="btn btn-ghost btn-sm" onclick="openLinkPaymentModal('${p.id}')">Liên kết đơn</button>` : ''}</td>
+        </tr>`;
+      }).join('')}
+      </tbody>
+    </table>
+    </div>
+  </div>` : ''}
   <div class="card list-wrap">
     <div class="table-wrap">
     <table>

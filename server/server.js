@@ -187,6 +187,53 @@ app.get('/api/presence', async (req, res) => {
   } catch (e) { res.status(500).json({ error: 'Lỗi máy chủ: ' + e.message }); }
 });
 
+// ---- SePay: webhook nhận giao dịch chuyển khoản — giao dịch hiện ngay trong app ----
+app.post('/api/sepay-webhook', async (req, res) => {
+  try {
+    const b = req.body || {};
+    const st = (await getState()) || {};
+    const cfg = ((st.settings || {}).sepay) || {};
+    if (cfg.secret && req.query.secret !== cfg.secret) return res.status(401).json({ error: 'Sai secret' });
+    if ((b.transferType || 'in') === 'out') return res.json({ ok: true, skip: 'money out' });
+    const amount = Math.round(+b.amount || 0);
+    const content = String(b.content || b.description || '');
+    if (!amount || amount <= 0) return res.status(400).json({ error: 'Thiếu số tiền' });
+
+    // Khớp đơn hàng: (1) nội dung có mã DH-xxxx → (2) số tiền đúng bằng tiền còn lại của đơn gần nhất
+    let matched = null;
+    const m = content.match(/DH[- ]?(\d{3,6})/i);
+    if (m) {
+      matched = (st.orders || []).find(o => (o.code || '').replace(/\D/g, '') === m[1]) || null;
+    }
+    if (!matched) {
+      const cands = (st.orders || []).filter(o => o.status !== 'cancelled' && (o.paidAmount || 0) < (o.items || []).reduce((s, it) => s + (+it.qty || 0) * (+it.price || 0), 0) - (+o.discount || 0));
+      matched = cands.find(o => {
+        const total = (o.items || []).reduce((s, it) => s + (+it.qty || 0) * (+it.price || 0), 0) - (+o.discount || 0);
+        return total - (o.paidAmount || 0) === amount;
+      }) || null;
+    }
+
+    st.payments = Array.isArray(st.payments) ? st.payments : [];
+    const pay = {
+      id: crypto.randomUUID(), ts: new Date().toISOString(), amount, content,
+      bank: String(b.bankCode || b.bankName || b.bank || 'NGÂN HÀNG').toUpperCase(),
+      gateway: 'SePay', orderId: matched ? matched.id : '', auto: !!matched,
+    };
+    st.payments.push(pay);
+    if (st.payments.length > 200) st.payments = st.payments.slice(-200);
+
+    if (matched) {
+      matched.paidAmount = (+matched.paidAmount || 0) + amount;
+      st.cash = Array.isArray(st.cash) ? st.cash : [];
+      st.cash.push({ id: crypto.randomUUID(), type: 'in', date: new Date().toISOString().slice(0, 10), amount, cat: 'Thu đơn hàng', method: 'Chuyển khoản', note: 'SePay tự động — ' + (matched.code || ''), orderId: matched.id, by: 'SePay', photos: [] });
+      st.notifications = Array.isArray(st.notifications) ? st.notifications : [];
+      st.notifications.unshift({ id: crypto.randomUUID(), type: 'pay', title: '💰 Chuyển khoản ' + amount.toLocaleString('vi-VN') + '₫', body: (matched.code || '') + ' — ' + content.slice(0, 80), ts: new Date().toISOString(), read: false });
+    }
+    await setState(st);
+    res.json({ ok: true, matched: matched ? matched.code : null });
+  } catch (e) { res.status(500).json({ error: 'Lỗi máy chủ: ' + e.message }); }
+});
+
 // ---- Phục vụ frontend (thư mục gốc của project) ----
 app.use(express.static(path.join(__dirname, '..')));
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, '..', 'index.html')));
