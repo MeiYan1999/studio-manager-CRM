@@ -198,6 +198,8 @@ input, select, textarea { font-family: var(--font); }
 .b-role-photographer { background: #ede9fe; color: #6d28d9; }
 .b-role-editor { background: #cffafe; color: #0e7490; }
 .b-role-assistant { background: #dbeafe; color: #1d4ed8; }
+.b-role-stylist { background: #fce7f3; color: #be185d; }
+.b-role-saleoff { background: #fef3c7; color: #b45309; }
 .b-role-manager { background: #f1f5f9; color: #475569; }
 .b-inactive { background: #f1f5f9; color: #94a3b8; }
 

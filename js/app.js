@@ -65,7 +65,7 @@ const NEXT_ACTION = {
 const ORDER_STATUS = { draft: 'Nháp', confirmed: 'Đã xác nhận', completed: 'Hoàn thành', cancelled: 'Đã hủy' };
 const CATS = ['Cưới', 'Gia đình', 'Chân dung', 'Sản phẩm', 'Sự kiện', 'Khác'];
 const CAT_CLS = { 'Cưới': 'b-cat-cuoi', 'Gia đình': 'b-cat-giadinh', 'Chân dung': 'b-cat-chandung', 'Sản phẩm': 'b-cat-sanpham', 'Sự kiện': 'b-cat-sukien', 'Khác': 'b-cat-khac' };
-const ROLES = { photographer: 'Nhiếp ảnh gia', editor: 'Hậu kỳ', assistant: 'Trợ lý', manager: 'Quản lý' };
+const ROLES = { photographer: 'Thợ Chụp', editor: 'Hậu kỳ', assistant: 'Sale Onl', stylist: 'Stylist', saleoff: 'Sale Off', manager: 'Quản lý' };
 
 const TITLES = {
   dashboard: ['Tổng quan', 'Bức tranh kinh doanh của studio'],
@@ -942,7 +942,7 @@ function bookingsListHtml() {
   <div class="card list-wrap">
     <div class="table-wrap">
     <table>
-      <thead><tr><th>Ngày</th><th>Giờ</th><th>Khách hàng</th><th>Gói dịch vụ</th><th>Địa điểm</th><th>Nhiếp ảnh gia</th><th>Trạng thái</th><th class="ta-c">Thao tác</th></tr></thead>
+      <thead><tr><th>Ngày</th><th>Giờ</th><th>Khách hàng</th><th>Gói dịch vụ</th><th>Địa điểm</th><th>Thợ Chụp</th><th>Trạng thái</th><th class="ta-c">Thao tác</th></tr></thead>
       <tbody id="bkRows">${bkRows()}</tbody>
     </table>
     </div>
@@ -992,7 +992,7 @@ function openBookingModal(id, dateStr, customerId) {
       <div class="field"><label>Ngày chụp <span class="req">*</span></label><input class="input" type="date" name="date" required value="${b ? b.date : (dateStr || todayStr())}"></div>
       <div class="field"><label>Giờ bắt đầu</label><input class="input" type="time" name="startTime" value="${b ? (b.startTime || '09:00') : '09:00'}"></div>
       <div class="field"><label>Thời lượng (giờ)</label><input class="input" type="number" name="hours" min="0.5" step="0.5" value="${b ? (b.hours || 2) : 2}"></div>
-      <div class="field"><label>Nhiếp ảnh gia</label><select class="select" name="photographerId"><option value="">— Chưa phân công —</option>${staffOpts}</select></div>
+      <div class="field"><label>Thợ Chụp</label><select class="select" name="photographerId"><option value="">— Chưa phân công —</option>${staffOpts}</select></div>
       <div class="field"><label>Chi nhánh</label><select class="select" name="branchId">${state.branches.map(x => `<option value="${x.id}" ${(b ? b.branchId === x.id : x.id === curBranchId()) ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select></div>
       <div class="field full"><label>Địa điểm</label><input class="input" name="location" value="${esc(b ? b.location : '')}" placeholder="Studio 1, Đà Lạt, nhà khách..."></div>
       <div class="field"><label>Trạng thái</label><select class="select" name="status">${stOpts}</select></div>
@@ -1064,7 +1064,7 @@ function viewBooking(id) {
         ${infoItem('clock', 'Thời gian', b.startTime ? `${b.startTime} – ${computeEnd(b.startTime, b.hours)} (${b.hours}h)` : '—')}
         ${infoItem('package', 'Gói dịch vụ', pkgName(b.packageId))}
         ${infoItem('pin', 'Địa điểm', b.location)}
-        ${infoItem('user', 'Nhiếp ảnh gia', b.photographerId ? staffName(b.photographerId) : 'Chưa phân công')}
+        ${infoItem('user', 'Thợ Chụp', b.photographerId ? staffName(b.photographerId) : 'Chưa phân công')}
         ${infoItem('phone', 'Điện thoại khách', cust ? cust.phone : '—')}
         ${b.notes ? infoItem('edit', 'Ghi chú', b.notes, true) : ''}
       </div>
@@ -2861,7 +2861,7 @@ const ALL_PERMS = PERM_MODULES.map(m => m[0]);
 const PERM_PRESETS = {
   admin:        { label: 'Quản trị', perms: ALL_PERMS },
   reception:    { label: 'Lễ tân', perms: ['dashboard', 'bookings', 'orders', 'customers', 'tasks', 'wardrobe', 'attendance', 'notifications', 'albums', 'photofilter'] },
-  photographer: { label: 'Nhiếp ảnh gia', perms: ['dashboard', 'bookings', 'tasks', 'wardrobe'] },
+  photographer: { label: 'Thợ Chụp', perms: ['dashboard', 'bookings', 'tasks', 'wardrobe'] },
   editor:       { label: 'Hậu kỳ', perms: ['dashboard', 'tasks'] },
   custom:       { label: 'Tùy chỉnh', perms: null },
 };
@@ -4966,7 +4966,7 @@ function gcalUrl(b) {
     action: 'TEMPLATE',
     text: state.settings.studioName + ' — ' + custName(b.customerId),
     dates: d + 'T' + st + '/' + d + 'T' + en,
-    details: 'Gói: ' + pkgName(b.packageId) + ' · Địa điểm: ' + (b.location || '') + ' · Nhiếp ảnh: ' + (b.photographerId ? staffName(b.photographerId) : ''),
+    details: 'Gói: ' + pkgName(b.packageId) + ' · Địa điểm: ' + (b.location || '') + ' · Thợ chụp: ' + (b.photographerId ? staffName(b.photographerId) : ''),
     location: b.location || '',
   });
   return 'https://calendar.google.com/calendar/render?' + params.toString();
