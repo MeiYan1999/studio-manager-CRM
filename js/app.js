@@ -6410,6 +6410,8 @@ async function init() {
 
   const h0 = (location.hash || '').replace('#', '');
   if (h0.startsWith('portal-')) {
+    $('#authScreen').classList.remove('show');
+    $('#pwdScreen').classList.remove('show');
     $('#portalScreen').classList.add('show');
     renderPortalScreen(h0.slice(7));
     return;
