@@ -975,3 +975,23 @@ select.select { border-radius: 10px; }
   border-radius: 14px; padding: 9px 12px; box-shadow: 0 14px 30px -12px rgba(28, 25, 23, .3);
 }
 .portal-sendbar .cnt { font-size: 12.5px; font-weight: 700; color: #1c1917; }
+
+/* ---- Thanh tìm kiếm + zoom ảnh trong cổng khách ---- */
+.pf-bar { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
+.pf-chip {
+  border: 1px solid var(--border); background: #fff; color: var(--text-2);
+  border-radius: 999px; padding: 6px 13px; font-size: 12px; font-weight: 700; cursor: pointer;
+  transition: all .15s ease;
+}
+.pf-chip.active { background: #1c1917; color: #fafaf9; border-color: #1c1917; }
+.tile-zoom {
+  position: absolute; top: 8px; left: 8px; width: 28px; height: 28px; border-radius: 50%;
+  background: rgba(255, 255, 255, .92); color: #78716c; display: flex; align-items: center; justify-content: center;
+  font-size: 13px; z-index: 2; box-shadow: 0 2px 6px rgba(28, 25, 23, .25); cursor: zoom-in;
+}
+.portal-zoom {
+  position: fixed; inset: 0; z-index: 400; background: rgba(24, 24, 27, .9);
+  display: flex; align-items: center; justify-content: center; cursor: zoom-out;
+  animation: fadeIn .2s ease;
+}
+.portal-zoom img { max-width: 94vw; max-height: 90vh; border-radius: 12px; box-shadow: 0 30px 80px rgba(0, 0, 0, .5); }

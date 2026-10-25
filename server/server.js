@@ -187,6 +187,60 @@ app.get('/api/presence', async (req, res) => {
   } catch (e) { res.status(500).json({ error: 'Lỗi máy chủ: ' + e.message }); }
 });
 
+// ---- Google Drive API v3: liệt kê ảnh trong thư mục công khai (port từ Mây Album) ----
+function driveFolderIdOf(input) {
+  const s = String(input || '').trim();
+  const m = s.match(/\/folders\/([a-zA-Z0-9_-]{10,})/) || s.match(/[?&]id=([a-zA-Z0-9_-]{10,})/);
+  if (m) return m[1];
+  return /^[a-zA-Z0-9_-]{10,}$/.test(s) ? s : '';
+}
+
+app.get('/api/drive-list', async (req, res) => {
+  if (!(await authUser(req))) return res.status(401).json({ error: 'Chưa đăng nhập' });
+  try {
+    const apiKey = String(req.query.key || '').trim() || process.env.DRIVE_API_KEY || '';
+    const folderId = driveFolderIdOf(req.query.folder || '');
+    const includeSub = req.query.sub === '1';
+    if (!folderId) return res.status(400).json({ error: 'Liên kết chưa đúng — dán link thư mục Drive dạng drive.google.com/drive/folders/…' });
+    if (!apiKey) return res.status(400).json({ error: 'Chưa có Google Drive API key — mở Cài đặt → Thông tin Studio để dán key' });
+    const G = 'https://www.googleapis.com/drive/v3';
+    const keyQ = '&key=' + encodeURIComponent(apiKey);
+    const fr = await fetch(G + '/files/' + encodeURIComponent(folderId) + '?fields=' + encodeURIComponent('id,name,mimeType') + '&supportsAllDrives=true' + keyQ);
+    if (!fr.ok) return res.status(502).json({ error: 'Google Drive từ chối (' + fr.status + ') — kiểm tra API key; thư mục phải chia sẻ "Ai có liên kết"' });
+    const folder = await fr.json();
+    const photos = [];
+    let truncated = false;
+    const queue = [{ id: folderId, path: '' }];
+    const visited = new Set([folderId]);
+    let folders = 0;
+    while (queue.length && !truncated) {
+      const cur = queue.shift();
+      if (++folders > 80) break;
+      let pageToken = '';
+      do {
+        const q = "'" + cur.id + "' in parents and trashed = false";
+        const url = G + '/files?q=' + encodeURIComponent(q) + '&fields=' + encodeURIComponent('nextPageToken,files(id,name,mimeType)')
+          + '&pageSize=1000&orderBy=name&supportsAllDrives=true&includeItemsFromAllDrives=true' + keyQ
+          + (pageToken ? '&pageToken=' + encodeURIComponent(pageToken) : '');
+        const r2 = await fetch(url);
+        if (!r2.ok) return res.status(502).json({ error: 'Không đọc được thư mục Drive (' + r2.status + ')' });
+        const j = await r2.json();
+        for (const f of (j.files || [])) {
+          if (f.mimeType === 'application/vnd.google-apps.folder') {
+            if (includeSub && !visited.has(f.id) && folders + queue.length < 80) { visited.add(f.id); queue.push({ id: f.id, path: cur.path ? cur.path + '/' + f.name : f.name }); }
+            continue;
+          }
+          if (!String(f.mimeType || '').startsWith('image/')) continue;
+          if (photos.length >= 1500) { truncated = true; break; }
+          photos.push({ fileId: f.id, name: f.name, path: cur.path });
+        }
+        pageToken = j.nextPageToken || '';
+      } while (pageToken && !truncated);
+    }
+    res.json({ ok: true, folderName: folder.name || 'Album', photos, truncated });
+  } catch (e) { res.status(500).json({ error: 'Lỗi máy chủ: ' + e.message }); }
+});
+
 // ---- SePay: webhook nhận giao dịch chuyển khoản — giao dịch hiện ngay trong app ----
 app.post('/api/sepay-webhook', async (req, res) => {
   try {

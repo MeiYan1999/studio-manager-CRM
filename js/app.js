@@ -76,9 +76,10 @@ const SHIFTS = {
 const shiftOf = s => SHIFTS[(s && s.shift) || 'normal'] || SHIFTS.normal;
 
 // ---- Nhật ký cập nhật (changelog) ----
-const APP_VERSION = '3.8';
+const APP_VERSION = '4.0';
 const CL_KIND = { new: ['✨ mới', 'b-delivered'], fix: ['🐛 sửa lỗi', 'b-unpaid'], ui: ['🎨 giao diện', 'b-deposit'], imp: ['⚡ nâng cấp', 'b-confirmed'] };
 const CHANGELOG = [
+  { v: '4.0', d: '26/10/2026', items: [['new', 'Album khách chọn theo kiến trúc Mây Album: server đọc Google Drive API v3 — dán link THƯ MỤC là tự nạp toàn bộ ảnh (kể cả thư mục con) thành lưới ảnh thật, mã lấy từ tên file, giữ nguyên tim cũ khi đồng bộ lại'], ['new', 'Cổng khách: ô tìm mã ảnh/năm file + lọc Tất cả/Đã chọn + nút xem ảnh lớn (nguồn gốc Drive)'], ['new', 'Cài đặt: ô Google Drive API key (tạo miễn phí console.cloud.google.com)']] },
   { v: '3.8', d: '26/10/2026', items: [['ui', 'Cổng khách chọn ảnh kiểu Snappic: lưới ảnh THẬT (thumbnail Google Drive) vuông + nút tim trên từng ảnh (tim đỏ nảy khi chọn) + mã ảnh góc + nút ghi chú; thanh đếm "Đã chọn X/Y" dính đáy kèm Copy mã & Gửi Studio'], ['new', 'Tạo album: dán DANH SÁCH link từng ảnh Drive (mỗi dòng 1 link) → tự bung lưới ảnh thật cho khách thả tim'], ['fix', 'Lỗi danh sách ảnh mới nhận nhầm trạng thái đã chọn từ lưới xem trước cũ']] },
   { v: '3.7', d: '26/10/2026', items: [['ui', 'Tạo Album thành 3 bước gọn: dán link Google Drive → nhập số ảnh (tự sinh mã A01…) → copy link thả tim ❤ gửi khách'], ['new', 'Cổng khách nhúng khung xem ảnh Google Drive thật ngay trên trang thả tim (Drive chia sẻ kiểu ai-có-link)']] },
   { v: '3.6', d: '26/10/2026', items: [['new', 'Chấm công di chuyển chi nhánh: GPS ghi cả lúc thoát ca; nếu vào ca không ở chi nhánh nào thì ngày công ghi nhận theo chi nhánh khớp GPS thoát ca — hiện nhãn "Làm tại: Chi nhánh…" và 2 dòng vị trí Vào/Ra kèm bản đồ']] },
@@ -2667,6 +2668,7 @@ function openStudioModal() {
       <div class="field full"><label>Địa chỉ</label><input class="input" name="address" value="${esc(st.address)}"></div>
       <div class="field"><label>Giờ làm việc — giờ vào</label><input class="input" type="time" name="workStart" value="${esc(st.workStart || '09:00')}"></div>
       <div class="field"><label>Giờ làm việc — giờ ra</label><input class="input" type="time" name="workEnd" value="${esc(st.workEnd || '18:00')}"></div>
+      <div class="field full"><label>Google Drive API key — tự nạp ảnh album từ Drive</label><input class="input" name="driveApiKey" value="${esc(st.driveApiKey || '')}" placeholder="AIza… (tạo miễn phí tại console.cloud.google.com → bật Google Drive API → Credentials → API key)"></div>
       <div class="field full" style="background:#f8fafc;border:1px solid var(--border);border-radius:12px;padding:12px 14px">
         <label style="font-weight:700">📍 Vị trí chấm công (GPS)</label>
         <p style="font-size:11.5px;color:var(--text-3);margin:4px 0 8px">Đây là vị trí <b>mặc định</b> cho nhân sự chưa gán chi nhánh. Mỗi chi nhánh cấu hình vị trí riêng trong <b>Hệ thống → Chi nhánh</b>. Khi chấm công, app so với vị trí gần nhất.</p>
@@ -2702,6 +2704,7 @@ function saveStudioInfo() {
   state.settings.address = fd.get('address').trim();
   state.settings.workStart = fd.get('workStart') || '09:00';
   state.settings.workEnd = fd.get('workEnd') || '18:00';
+  state.settings.driveApiKey = (fd.get('driveApiKey') || '').trim();
   state.settings.studioLat = fd.get('studioLat').trim() || '';
   state.settings.studioLng = fd.get('studioLng').trim() || '';
   state.settings.studioRadius = +fd.get('studioRadius') || 200;
@@ -5616,6 +5619,11 @@ function openGalleryModal(bookingId) {
               <textarea class="textarea" id="galFiles" style="min-height:74px;font-size:11px;margin-top:6px" placeholder="Mỗi dòng 1 link ảnh, VD:&#10;https://drive.google.com/file/d/1AbC.../view&#10;https://drive.google.com/file/d/1XyZ.../view&#10;(trên Drive: chọn ảnh → chuột phải → Chia sẻ → Copy link)" oninput="galFilesHint()">${esc((g.photos || []).filter(p => p.fileId).map(p => 'https://drive.google.com/file/d/' + p.fileId + '/view').join('\n'))}</textarea>
               <div class="form-hint" id="galFilesHint">${(g.photos || []).some(p => p.fileId) ? '✓ Đang có ' + g.photos.filter(p => p.fileId).length + ' ảnh thật — khách sẽ thấy lưới ảnh + nút tim' : 'Dán link từng ảnh vào đây → khách thấy ẢNH THẬT ngay trong link thả tim (chia sẻ kiểu ai-có-link)'}</div>
             </div>
+            <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;align-items:center">
+              <button class="btn btn-primary btn-sm" style="flex:1;min-width:220px" onclick="galLoadDrive('${b.id}')">${icon('refresh')} Nạp toàn bộ ảnh từ thư mục Drive</button>
+              <label class="checkbox-row" style="font-size:11.5px;gap:5px"><input type="checkbox" id="galSub">gồm thư mục con</label>
+            </div>
+            <div class="form-hint" id="galDriveLoad">${state.settings.driveApiKey ? 'Bấm nút trên: server đọc trực tiếp thư mục Drive → lưới ảnh thật + mã từ tên file (giữ nguyên tim cũ).' : 'Cần dán Google Drive API key 1 lần: Cài đặt → Thông tin Studio (tạo key miễn phí tại console.cloud.google.com — bật Drive API).'}</div>
             <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
               <button class="btn btn-ghost btn-sm" onclick="scanIntoGallery('${b.id}')" title="Lấy mã ảnh từ thư mục máy/NAS thay vì gõ">${icon('refresh')} Quét mã ảnh từ thư mục máy</button>
             </div>
@@ -5677,6 +5685,39 @@ function galFilesHint() {
   const ids = driveFileIds(($('#galFiles') || {}).value || '');
   const el = $('#galFilesHint');
   if (el) el.innerHTML = ids.length ? '✓ Nhận ' + ids.length + ' ảnh — bấm "Tạo Link Chọn Ảnh" để cập nhật' : 'Dán link từng ảnh vào đây → khách thấy ẢNH THẬT ngay trong link thả tim (chia sẻ kiểu ai-có-link)';
+}
+
+async function galLoadDrive(bookingId) {
+  const b = byId(state.bookings, bookingId);
+  const url = (($('#galSource') || {}).value || '').trim();
+  if (!driveFolderId(url)) { toast('Dán link thư mục Drive vào ô phía trên trước nhé', 'error'); return; }
+  if (!SERVER_MODE) { toast('Chức năng này chạy trên bản online (server) — mở studio-ofej.onrender.com', 'error'); return; }
+  const key = state.settings.driveApiKey || '';
+  if (!key) { toast('Chưa có API key — đang mở Cài đặt để dán key', 'error'); openStudioModal(); return; }
+  const hint = $('#galDriveLoad');
+  if (hint) hint.textContent = 'Đang đọc thư mục Drive…';
+  try {
+    const sub = $('#galSub') && $('#galSub').checked ? '&sub=1' : '';
+    const r = await fetch('/api/drive-list?folder=' + encodeURIComponent(url) + '&key=' + encodeURIComponent(key) + sub);
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || 'Không đọc được Drive');
+    const old = b.gallery.photos || [];
+    b.gallery.photos = j.photos.map((f, i) => {
+      const prev = old.find(p => p.fileId === f.fileId);
+      const code = f.name.replace(/\.[^.]+$/, '').slice(0, 24);
+      return prev || { id: uid(), fileId: f.fileId, code: code || 'A' + pad(i + 1), name: f.name.slice(0, 26), selected: false };
+    });
+    b.gallery.sourceUrl = url;
+    b.gallery.driveId = driveFolderId(url);
+    b.gallery.allowSelect = true;
+    __galleryTouchedAt = Date.now();
+    logAction('update', 'portal', 'Nạp ' + b.gallery.photos.length + ' ảnh từ Drive — ' + custName(b.customerId));
+    save(); openGalleryModal(bookingId);
+    toast('Đã nạp ' + b.gallery.photos.length + ' ảnh thật từ Drive' + (j.truncated ? ' (giới hạn 1500 ảnh)' : '') + ' — mã lấy từ tên file');
+  } catch (e) {
+    toast(e.message, 'error');
+    if (hint) hint.textContent = '⚠ ' + e.message;
+  }
 }
 function galGenPreview() { /* cập nhật số trên nút lưu khi đổi số lượng */ const el = document.querySelector('#modalRoot .modal-foot .btn-primary'); if (el) el.innerHTML = `${icon('check')} Tạo Link Chọn Ảnh (${Math.min(500, Math.max(1, +(($('#galCount') || {}).value || 30)))} ảnh)`; }
 
@@ -5977,11 +6018,12 @@ function portalGridHtml(photos, g, token, mode, studioName) {
   const hasImg = photos.some(p => p.fileId);
   const selN = photos.filter(p => p.selected).length;
   const tile = p => p.fileId ? `
-    <div class="photo-tile img ${p.selected ? 'sel' : ''}" data-pid="${p.id}" onclick="this.classList.toggle('sel');portalCnt(this)">
+    <div class="photo-tile img ${p.selected ? 'sel' : ''}" data-pid="${p.id}" data-name="${esc(p.name || p.code)}" onclick="this.classList.toggle('sel');portalCnt(this)">
       <img src="${driveThumb(p.fileId, 600)}" loading="lazy" alt="${esc(p.code)}">
       ${g.watermark ? `<div class="wm">© ${esc(studioName)}</div>` : ''}
       <span class="tile-code">${esc(p.code)}</span>
       <span class="tile-heart">${p.selected ? '❤' : '♡'}</span>
+      <span class="tile-zoom" title="Xem ảnh lớn" onclick="event.stopPropagation();portalZoom(this.closest('.photo-tile'))">⤢</span>
       ${g.allowNotes !== false ? `<a class="tile-note" title="Ghi chú yêu cầu sửa ảnh" onclick="event.stopPropagation();${noteFn}('${token}','${p.id}')">✎</a>` : ''}
     </div>` : `
     <div class="photo-tile ${p.selected ? 'sel' : ''}" data-pid="${p.id}" onclick="this.classList.toggle('sel');this.querySelector('.tick').textContent=this.classList.contains('sel')?'❤ đã chọn':''">
@@ -5989,7 +6031,12 @@ function portalGridHtml(photos, g, token, mode, studioName) {
       <div class="pc">${esc(p.code)}</div><div class="pn">${esc(p.name)}</div><div class="tick">${p.selected ? '❤' + (p.note ? ' 📝' : '') + ' đã chọn' : ''}</div>
       ${g.allowNotes !== false ? `<div style="font-size:10px;margin-top:2px"><a class="link" style="font-size:10px" onclick="event.stopPropagation();${noteFn}('${token}','${p.id}')">✎ ghi chú sửa</a>${p.note ? `<div class="cell-sub" style="font-size:9.5px;margin-top:2px">${esc(p.note)}</div>` : ''}</div>` : ''}
     </div>`;
-  return `<div class="photo-grid ${hasImg ? 'grid-img' : ''}">${photos.map(tile).join('')}</div>
+  return `${hasImg ? `<div class="pf-bar">
+      <input class="input" style="flex:1;min-width:140px;padding:7px 11px;font-size:12.5px" placeholder="🔍 Tìm mã ảnh / tên file…" oninput="pfFilter(this.value)">
+      <button class="pf-chip active" data-f="all" onclick="pfFilter('',this)">Tất cả</button>
+      <button class="pf-chip" data-f="sel" onclick="pfFilter('',this)">Đã chọn ❤</button>
+    </div>` : ''}
+  <div class="photo-grid ${hasImg ? 'grid-img' : ''}">${photos.map(tile).join('')}</div>
   <div class="portal-sendbar">
     <span class="cnt">❤ Đã chọn <b id="sbCnt">${selN}</b>/${g.includedQty || photos.length}${g.includedQty ? ' ảnh gói' : ' ảnh'}</span>
     <div style="flex:1"></div>
@@ -6005,6 +6052,30 @@ function portalCnt(el) {
   document.querySelectorAll('#sbCnt').forEach(s => s.textContent = n);
   const h = el.querySelector('.tile-heart');
   if (h) h.textContent = el.classList.contains('sel') ? '❤' : '♡';
+}
+
+// Tìm kiếm + lọc ảnh trong cổng khách (Tất cả / Đã chọn)
+function pfFilter(q, chipEl) {
+  const mode = chipEl ? chipEl.dataset.f : ((document.querySelector('.pf-chip.active') || { dataset: { f: 'all' } }).dataset.f);
+  if (chipEl) document.querySelectorAll('.pf-chip').forEach(c => c.classList.toggle('active', c === chipEl));
+  const ql = String(q || '').trim().toLowerCase();
+  document.querySelectorAll('#portalBody .photo-tile.img').forEach(t => {
+    const hay = (((t.querySelector('.tile-code') || {}).textContent || '') + ' ' + (t.dataset.name || '')).toLowerCase();
+    const show = (!ql || hay.includes(ql)) && (mode !== 'sel' || t.classList.contains('sel'));
+    t.style.display = show ? '' : 'none';
+  });
+}
+
+// Xem ảnh lớn (nguồn gốc Google Drive)
+function portalZoom(tile) {
+  const img = tile && tile.querySelector('img');
+  if (!img) return;
+  const id = new URL(img.src).searchParams.get('id');
+  const ov = document.createElement('div');
+  ov.className = 'portal-zoom';
+  ov.innerHTML = `<img src="https://lh3.googleusercontent.com/d/${id}=w1600" alt="xem ảnh lớn">`;
+  ov.onclick = () => ov.remove();
+  document.body.appendChild(ov);
 }
 
 /* ---- Portal chế độ online: máy khách không có dữ liệu local → tải từ server ---- */
