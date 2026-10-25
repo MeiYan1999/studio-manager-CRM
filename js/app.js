@@ -114,7 +114,7 @@ function blankState() {
     outfits: [], concepts: [], loans: [],
     users: [],
     logs: [],
-    expenses: [], payrolls: [], contracts: [],
+    expenses: [], payrolls: [], contracts: [], cash: [],
     attendance: [],
     departments: [], roleGroups: [],
     notifications: [],
@@ -246,6 +246,7 @@ function migrateLegacy(parsed) {
   });
   if (!Array.isArray(p.logs)) { state.logs = []; changed = true; }
   if (!Array.isArray(p.expenses)) { state.expenses = seedExpenses(); changed = true; }
+  if (!Array.isArray(p.cash)) { state.cash = seedCash(); changed = true; }
   if (!Array.isArray(p.contracts)) { state.contracts = seedContracts(); state.contractSeq = 1003; changed = true; }
   else if (!p.contractSeq) state.contractSeq = 1003;
   if (!Array.isArray(p.payrolls)) { state.payrolls = []; changed = true; }
@@ -401,7 +402,7 @@ function seedData() {
     outfits: seedOutfits(), concepts: seedConcepts(), loans: seedLoans(),
     users: [],
     logs: [],
-    expenses: seedExpenses(), payrolls: [], contracts: seedContracts(),
+    expenses: seedExpenses(), payrolls: [], contracts: seedContracts(), cash: seedCash(),
     attendance: seedAttendance(),
     departments: [
       { id: 'dp1', name: 'Kinh doanh & CSKH' },
@@ -4067,6 +4068,23 @@ function seedExpenses() {
   ];
 }
 
+const CASH_CATS_IN = ['Thu đơn hàng', 'Tiền cọc', 'Bán phụ kiện / ảnh thêm', 'Thu khác'];
+const CASH_CATS_OUT = ['Lương & thưởng', 'Thuê studio / nhà', 'Quảng cáo', 'Đồ nghề & thiết bị', 'Điện nước', 'Vận chuyển', 'Chi hộ khách', 'Chi khác'];
+const CASH_METHODS = ['Tiền mặt', 'Chuyển khoản', 'QR', 'Thẻ'];
+
+function seedCash() {
+  return [
+    { id: 'cf1', type: 'out', date: dOff(-12), amount: 8000000, cat: 'Thuê studio / nhà', method: 'Chuyển khoản', note: 'Thuê mặt bằng tháng 10', orderId: '', by: 'admin' },
+    { id: 'cf2', type: 'out', date: dOff(-9), amount: 3200000, cat: 'Quảng cáo', method: 'Chuyển khoản', note: 'Ads tháng 10', orderId: '', by: 'admin' },
+    { id: 'cf3', type: 'in', date: dOff(-8), amount: 5000000, cat: 'Tiền cọc', method: 'QR', note: 'Cọc buổi chụp gia đình', orderId: 'o15', by: 'admin' },
+    { id: 'cf4', type: 'in', date: dOff(-6), amount: 7500000, cat: 'Thu đơn hàng', method: 'Chuyển khoản', note: 'Thanh toán đủ gói Mom & Baby', orderId: 'o13', by: 'admin' },
+    { id: 'cf5', type: 'out', date: dOff(-5), amount: 1500000, cat: 'Đồ nghề & thiết bị', method: 'Tiền mặt', note: 'Mua thẻ nhớ + pin', orderId: '', by: 'admin' },
+    { id: 'cf6', type: 'in', date: dOff(-3), amount: 450000, cat: 'Bán phụ kiện / ảnh thêm', method: 'Tiền mặt', note: 'Bán album thêm cho khách', orderId: '', by: 'admin' },
+    { id: 'cf7', type: 'out', date: dOff(-2), amount: 2200000, cat: 'Vận chuyển', method: 'Tiền mặt', note: 'Xe đi ngoại cảnh', orderId: '', by: 'admin' },
+    { id: 'cf8', type: 'in', date: dOff(-1), amount: 3000000, cat: 'Tiền cọc', method: 'QR', note: 'Cọc gói chụp sản phẩm', orderId: 'o16', by: 'admin' },
+  ];
+}
+
 function financeView() {
   const v = viewState.finance;
   const tab = (t, label) => `<button class="${v.tab === t ? 'active' : ''}" onclick="viewState.finance.tab='${t}';render()">${label}</button>`;
@@ -4074,10 +4092,11 @@ function financeView() {
   let body = '';
   if (v.tab === 'expenses') body = expensesTab();
   else if (v.tab === 'payroll') body = payrollTab();
+  else if (v.tab === 'cash') body = cashTab();
   else body = reportTab();
   return `
   <div class="toolbar">
-    <div class="pill-toggle">${tab('report', 'Báo cáo')}${tab('expenses', 'Chi phí')}${tab('payroll', 'Lương')}</div>
+    <div class="pill-toggle">${tab('report', 'Báo cáo')}${tab('cash', 'Thu chi')}${tab('expenses', 'Chi phí')}${tab('payroll', 'Lương')}</div>
     ${monthInput}
   </div>
   ${body}`;
@@ -4119,6 +4138,134 @@ function reportTab() {
       </div>
     </div>
   </div>`;
+}
+
+/* ---- Quản lý Thu chi (sổ quỹ) ---- */
+function cashFiltered() {
+  const m = viewState.finance.month;
+  return (state.cash || [])
+    .filter(x => !m || (x.date || '').startsWith(m))
+    .filter(x => viewState.finance.cashType === 'all' || viewState.finance.cashType === undefined || x.type === viewState.finance.cashType)
+    .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+}
+
+function cashTab() {
+  const list = cashFiltered();
+  const month = viewState.finance.month;
+  const tin = list.filter(x => x.type === 'in').reduce((s, x) => s + (+x.amount || 0), 0);
+  const tout = list.filter(x => x.type === 'out').reduce((s, x) => s + (+x.amount || 0), 0);
+  const allIn = (state.cash || []).filter(x => x.type === 'in').reduce((s, x) => s + (+x.amount || 0), 0);
+  const allOut = (state.cash || []).filter(x => x.type === 'out').reduce((s, x) => s + (+x.amount || 0), 0);
+  const t = viewState.finance.cashType || 'all';
+  const tf = k => `<button class="${t === k ? 'active' : ''}" onclick="viewState.finance.cashType='${k}';render()">${{ all: 'Tất cả', in: 'Thu', out: 'Chi' }[k]}</button>`;
+  return `
+  <div class="stat-grid" style="grid-template-columns:repeat(4,1fr)">
+    <div class="card stat-card tint-green"><div class="stat-label">Tiền thu ${month ? '· tháng ' + (+month.slice(5)) + '/' + month.slice(0, 4) : ''}</div><div class="stat-val" style="color:var(--green)">+${fmtMoney(tin)}</div></div>
+    <div class="card stat-card tint-red"><div class="stat-label">Tiền chi ${month ? '· tháng ' + (+month.slice(5)) + '/' + month.slice(0, 4) : ''}</div><div class="stat-val" style="color:var(--red)">−${fmtMoney(tout)}</div></div>
+    <div class="card stat-card ${tin - tout >= 0 ? 'tint-green' : 'tint-red'}"><div class="stat-label">Chênh lệch tháng</div><div class="stat-val">${tin - tout >= 0 ? '+' : '−'}${fmtMoney(Math.abs(tin - tout))}</div></div>
+    <div class="card stat-card tint-indigo"><div class="stat-label">Tồn quỹ tích lũy (thu − chi)</div><div class="stat-val">${fmtMoney(allIn - allOut)}</div><div class="cell-sub">tổng ${state.cash.length} giao dịch</div></div>
+  </div>
+  <div class="toolbar">
+    <div class="pill-toggle">${tf('all')}${tf('in')}${tf('out')}</div>
+    <div class="spacer"></div>
+    <button class="btn btn-primary" onclick="openCashModal()">${icon('plus')} Giao dịch thu/chi</button>
+  </div>
+  <div class="card list-wrap">
+    <div class="table-wrap">
+    <table>
+      <thead><tr><th>Ngày</th><th>Loại</th><th>Danh mục</th><th>Hình thức</th><th>Liên kết</th><th>Ghi chú</th><th class="ta-r">Số tiền</th><th class="ta-c">Thao tác</th></tr></thead>
+      <tbody>
+      ${list.map(x => {
+        const o = x.orderId ? byId(state.orders, x.orderId) : null;
+        return `<tr>
+          <td class="money-muted">${fmtDate(x.date)}</td>
+          <td><span class="badge ${x.type === 'in' ? 'b-paid' : 'b-unpaid'}">${x.type === 'in' ? '↓ Thu' : '↑ Chi'}</span></td>
+          <td class="cell-main">${esc(x.cat)}</td>
+          <td class="money-muted">${esc(x.method || '—')}</td>
+          <td>${o ? `<a class="link" onclick="viewOrder('${o.id}')">${esc(o.code)}</a>` : '<span class="cell-sub">—</span>'}</td>
+          <td class="money-muted">${esc(x.note || '—')}</td>
+          <td class="money ta-r" style="color:${x.type === 'in' ? 'var(--green)' : 'var(--red)'}">${x.type === 'in' ? '+' : '−'}${fmtMoney(+x.amount || 0)}</td>
+          <td class="cell-actions ta-c">
+            <button class="icon-btn" title="Sửa" onclick="openCashModal('${x.id}')">${icon('edit')}</button>
+            <button class="icon-btn danger" title="Xóa" onclick="deleteCash('${x.id}')">${icon('trash')}</button>
+          </td>
+        </tr>`;
+      }).join('') || emptyRow(8, 'Chưa có giao dịch thu chi nào trong tháng này')}
+      </tbody>
+    </table>
+    </div>
+  </div>`;
+}
+
+function openCashModal(id) {
+  const x = id ? byId(state.cash, id) : null;
+  const type = x ? x.type : 'in';
+  const catOpts = (cats, sel) => cats.map(c => `<option value="${esc(c)}" ${sel === c ? 'selected' : ''}>${esc(c)}</option>`).join('');
+  const orderOpts = state.orders.slice().sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || '')).slice(0, 60)
+    .map(o => `<option value="${o.id}" ${x && x.orderId === o.id ? 'selected' : ''}>${esc(o.code)} — ${esc(custName(o.customerId))}</option>`).join('');
+  openModal(`
+    <div class="modal-head"><h3>${x ? 'Sửa giao dịch' : 'Ghi giao dịch thu/chi'}</h3><button class="icon-btn" onclick="closeModal()">${icon('x')}</button></div>
+    <form id="frm" class="modal-body form-grid" onsubmit="return false;">
+      <div class="field full">
+        <label>Loại giao dịch</label>
+        <div class="pill-toggle">
+          <button type="button" id="cashTypeIn" class="${type === 'in' ? 'active' : ''}" onclick="cashPickType('in')">${icon('arrow-down')} Tiền thu</button>
+          <button type="button" id="cashTypeOut" class="${type === 'out' ? 'active' : ''}" onclick="cashPickType('out')">${icon('arrow-up')} Tiền chi</button>
+        </div>
+        <input type="hidden" name="type" value="${type}">
+      </div>
+      <div class="field"><label>Ngày <span class="req">*</span></label><input class="input" type="date" name="date" required value="${esc(x ? x.date : todayStr())}"></div>
+      <div class="field"><label>Số tiền <span class="req">*</span></label><input class="input" type="number" min="0" step="1000" name="amount" required value="${x ? (+x.amount || '') : ''}" placeholder="VD: 500000"></div>
+      <div class="field full"><label>Danh mục</label><select class="select" name="cat" id="cashCat">
+        <optgroup label="Thu">${catOpts(CASH_CATS_IN, x ? x.cat : '')}</optgroup>
+        <optgroup label="Chi">${catOpts(CASH_CATS_OUT, x ? x.cat : '')}</optgroup>
+      </select></div>
+      <div class="field"><label>Hình thức</label><select class="select" name="method">${CASH_METHODS.map(m => `<option ${x && x.method === m ? 'selected' : ''}>${m}</option>`).join('')}</select></div>
+      <div class="field"><label>Liên kết đơn hàng</label><select class="select" name="orderId"><option value="">— Không —</option>${orderOpts}</select></div>
+      <div class="field full"><label>Ghi chú</label><input class="input" name="note" value="${esc(x ? x.note || '' : '')}" placeholder="Nội dung giao dịch..."></div>
+    </form>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal()">Hủy</button>
+      <button class="btn btn-primary" onclick="saveCash('${id || ''}')">${icon('check')} Lưu giao dịch</button>
+    </div>`);
+}
+
+function cashPickType(t) {
+  $('#frm [name=type]').value = t;
+  $('#cashTypeIn').classList.toggle('active', t === 'in');
+  $('#cashTypeOut').classList.toggle('active', t === 'out');
+  const sel = $('#cashCat');
+  const grp = t === 'in' ? 0 : 1;
+  sel.selectedIndex = [...sel.options].findIndex(o => o.parentElement === sel.getElementsByTagName('optgroup')[grp]);
+}
+
+function saveCash(id) {
+  const f = $('#frm');
+  if (!f.reportValidity()) return;
+  const fd = new FormData(f);
+  const data = {
+    type: fd.get('type'), date: fd.get('date'), amount: +fd.get('amount') || 0,
+    cat: fd.get('cat') || 'Khác', method: fd.get('method'), orderId: fd.get('orderId') || '',
+    note: fd.get('note').trim(),
+  };
+  const u = currentUser();
+  if (id) {
+    Object.assign(byId(state.cash, id), data);
+    logAction('update', 'cash', `${data.type === 'in' ? 'Thu' : 'Chi'} ${fmtMoney(data.amount)} — ${data.cat}`);
+  } else {
+    state.cash.push(Object.assign({ id: uid(), by: u ? u.name : '' }, data));
+    logAction('create', 'cash', `${data.type === 'in' ? 'Thu' : 'Chi'} ${fmtMoney(data.amount)} — ${data.cat}`);
+  }
+  save(); closeModal(); render();
+  toast('Đã lưu giao dịch ' + (data.type === 'in' ? 'thu' : 'chi') + ' ' + fmtMoney(data.amount));
+}
+
+function deleteCash(id) {
+  const x = byId(state.cash, id);
+  if (!x || !confirm(`Xóa giao dịch ${x.type === 'in' ? 'thu' : 'chi'} ${fmtMoney(x.amount)} (${x.cat})?`)) return;
+  state.cash = state.cash.filter(c => c.id !== id);
+  logAction('delete', 'cash', `${x.type === 'in' ? 'Thu' : 'Chi'} ${fmtMoney(x.amount)} — ${x.cat}`);
+  save(); render();
 }
 
 function expensesTab() {
@@ -5058,7 +5205,7 @@ const ENTITY_LABEL = {
   user: 'Tài khoản', customer: 'Khách hàng', booking: 'Lịch chụp', order: 'Đơn hàng',
   task: 'Công việc', column: 'Cột công việc', outfit: 'Trang phục', concept: 'Concept',
   loan: 'Phiếu mượn', settings: 'Cài đặt', system: 'Hệ thống',
-  expense: 'Chi phí', payroll: 'Lương', contract: 'Hợp đồng', portal: 'Cổng KH', attendance: 'Chấm công',
+  expense: 'Chi phí', payroll: 'Lương', contract: 'Hợp đồng', portal: 'Cổng KH', attendance: 'Chấm công', cash: 'Thu chi',
 };
 
 function logAction(action, entity, target, user) {
