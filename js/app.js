@@ -4045,16 +4045,16 @@ async function selfPunch() {
 
 /* ---- Phân hệ quản lý chấm công ---- */
 /* ---- Chia ca làm việc theo tuần (kiểu bảng Excel) ---- */
+const spISO = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
 function spWeekStart(dateStr) {
   const d = new Date(dateStr + 'T00:00:00');
-  const dow = (d.getDay() + 6) % 7; // Thứ 2 = 0
-  d.setDate(d.getDate() - dow);
-  return d.toISOString().slice(0, 10);
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); // Thứ 2 = đầu tuần
+  return spISO(d);
 }
 function spAddDays(dateStr, n) {
   const d = new Date(dateStr + 'T00:00:00');
   d.setDate(d.getDate() + n);
-  return d.toISOString().slice(0, 10);
+  return spISO(d);
 }
 
 function shiftplanView() {
