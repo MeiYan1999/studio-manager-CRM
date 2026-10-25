@@ -76,9 +76,10 @@ const SHIFTS = {
 const shiftOf = s => SHIFTS[(s && s.shift) || 'normal'] || SHIFTS.normal;
 
 // ---- Nhật ký cập nhật (changelog) ----
-const APP_VERSION = '4.0';
+const APP_VERSION = '4.1';
 const CL_KIND = { new: ['✨ mới', 'b-delivered'], fix: ['🐛 sửa lỗi', 'b-unpaid'], ui: ['🎨 giao diện', 'b-deposit'], imp: ['⚡ nâng cấp', 'b-confirmed'] };
 const CHANGELOG = [
+  { v: '4.1', d: '26/10/2026', items: [['new', 'Nút Xuất Excel (CSV mở bằng Excel): Đơn hàng (theo bộ lọc đang xem, kèm tổng tiền), Bảng lương tháng (lương cố định/giờ, giờ công, hoa hồng %), Hợp đồng (giá trị, đã thu, kỳ thanh toán kế tiếp)']] },
   { v: '4.0', d: '26/10/2026', items: [['new', 'Album khách chọn theo kiến trúc Mây Album: server đọc Google Drive API v3 — dán link THƯ MỤC là tự nạp toàn bộ ảnh (kể cả thư mục con) thành lưới ảnh thật, mã lấy từ tên file, giữ nguyên tim cũ khi đồng bộ lại'], ['new', 'Cổng khách: ô tìm mã ảnh/năm file + lọc Tất cả/Đã chọn + nút xem ảnh lớn (nguồn gốc Drive)'], ['new', 'Cài đặt: ô Google Drive API key (tạo miễn phí console.cloud.google.com)']] },
   { v: '3.8', d: '26/10/2026', items: [['ui', 'Cổng khách chọn ảnh kiểu Snappic: lưới ảnh THẬT (thumbnail Google Drive) vuông + nút tim trên từng ảnh (tim đỏ nảy khi chọn) + mã ảnh góc + nút ghi chú; thanh đếm "Đã chọn X/Y" dính đáy kèm Copy mã & Gửi Studio'], ['new', 'Tạo album: dán DANH SÁCH link từng ảnh Drive (mỗi dòng 1 link) → tự bung lưới ảnh thật cho khách thả tim'], ['fix', 'Lỗi danh sách ảnh mới nhận nhầm trạng thái đã chọn từ lưới xem trước cũ']] },
   { v: '3.7', d: '26/10/2026', items: [['ui', 'Tạo Album thành 3 bước gọn: dán link Google Drive → nhập số ảnh (tự sinh mã A01…) → copy link thả tim ❤ gửi khách'], ['new', 'Cổng khách nhúng khung xem ảnh Google Drive thật ngay trên trang thả tim (Drive chia sẻ kiểu ai-có-link)']] },
@@ -2019,6 +2020,7 @@ function ordersView() {
     </select>
     <span class="badge b-deposit" id="orderSum">${orderSumText()}</span>
     <div class="spacer"></div>
+    <button class="btn btn-ghost" onclick="exportOrdersExcel()" title="Xuất danh sách đang lọc ra file Excel">${icon('download')} Xuất Excel</button>
     <button class="btn btn-primary" onclick="openOrderModal()">${icon('plus')} Tạo đơn hàng</button>
   </div>
   <div class="card list-wrap">
@@ -4409,6 +4411,78 @@ function attMonthData() {
   };
 }
 
+/* ---- Xuất Excel (CSV mở được bằng Excel) — dùng chung ---- */
+function downloadCsv(name, rows, what) {
+  const csv = '\uFEFF' + rows.map(r => r.map(c => '"' + String(c ?? '').replace(/"/g, '""') + '"').join(';')).join('\r\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+  a.download = name;
+  a.click();
+  URL.revokeObjectURL(a.href);
+  logAction('data', 'system', 'Xuất Excel: ' + what);
+  save();
+  toast('Đã xuất Excel ' + what + ' — kiểm tra thư mục tải về');
+}
+
+function exportOrdersExcel() {
+  const list = orderFiltered();
+  if (!list.length) { toast('Không có đơn hàng nào để xuất', 'error'); return; }
+  downloadCsv('don-hang-' + todayStr() + '.csv', [
+    ['BẢNG ĐƠN HÀNG — ' + state.settings.studioName + ' — xuất ' + fmtDate(todayStr())],
+    ['MÃ ĐH', 'KHÁCH HÀNG', 'SĐT', 'NGÀY TẠO', 'DỊCH VỤ', 'TỔNG TIỀN', 'ĐÃ THU', 'CÒN LẠI', 'THANH TOÁN', 'TRẠNG THÁI', 'GHI CHÚ'],
+    ...list.map(o => [
+      o.code, custName(o.customerId), (byId(state.customers, o.customerId) || {}).phone || '',
+      fmtDate(o.createdAt), o.items.map(it => it.name + ' x' + it.qty).join(' + '),
+      orderTotal(o), +o.paidAmount || 0, orderRemaining(o), PAY_LABEL[payStatus(o)], ORDER_STATUS[o.status] || o.status, o.notes || '',
+    ]),
+    [], ['TỔNG CỘNG', '', '', '', '', list.reduce((s, o) => s + orderTotal(o), 0), list.reduce((s, o) => s + (+o.paidAmount || 0), 0), list.reduce((s, o) => s + orderRemaining(o), 0)],
+  ], list.length + ' đơn hàng');
+}
+
+function exportPayrollExcel() {
+  const month = viewState.finance.month;
+  computePayroll(month);
+  const list = state.payrolls.filter(p => p.month === month);
+  if (!list.length) { toast('Bấm "Tính lương tự động" trước đã', 'error'); return; }
+  downloadCsv('bang-luong-' + month + '.csv', [
+    ['BẢNG LƯƠNG THÁNG ' + month.slice(5) + '/' + month.slice(0, 4) + ' — ' + state.settings.studioName],
+    ['NHÂN SỰ', 'VAI TRÒ', 'CÁCH TÍNH', 'LƯƠNG CỐ ĐỊNH', 'GIỜ CÔNG', 'LƯƠNG/GIỜ', 'LƯƠNG THEO GIỜ', 'DOANH THU TÍNH HOA HỒNG', 'HOA HỒNG %', 'HOA HỒNG', 'TỔNG LĨNH', 'ĐÃ TRẢ', 'NGÀY TRẢ'],
+    ...list.map(p => {
+      const s = byId(state.staff, p.staffId) || {};
+      return [
+        s.name || '', ROLES[s.role] || '', s.payMode === 'hourly' ? 'Theo giờ' : 'Cố định',
+        s.payMode === 'hourly' ? 0 : (+s.salary || 0), Math.round((+p.hours || 0) * 10) / 10, s.payMode === 'hourly' ? (+s.hourlyRate || 0) : '',
+        s.payMode === 'hourly' ? p.base : 0, p.commissionBase || 0, (+s.commissionPct || 0) + '%', p.commission || 0, p.total || 0,
+        p.paid ? 'Rồi' : 'Chưa', p.paidDate ? fmtDate(p.paidDate) : '',
+      ];
+    }),
+    [], ['TỔNG', '', '', '', '', '', '', '', '', list.reduce((t, p) => t + (p.commission || 0), 0), list.reduce((t, p) => t + (p.total || 0), 0)],
+  ], 'bảng lương tháng ' + month);
+}
+
+function exportContractsExcel() {
+  const v = viewState.contracts;
+  const ql = v.q.trim().toLowerCase();
+  const list = [...state.contracts]
+    .filter(c => v.status === 'all' || c.status === v.status)
+    .filter(c => !ql || [c.code, custName(c.customerId), c.service].some(x => String(x || '').toLowerCase().includes(ql)));
+  if (!list.length) { toast('Không có hợp đồng nào để xuất', 'error'); return; }
+  downloadCsv('hop-dong-' + todayStr() + '.csv', [
+    ['BẢNG HỢP ĐỒNG — ' + state.settings.studioName + ' — xuất ' + fmtDate(todayStr())],
+    ['MÃ HĐ', 'KHÁCH HÀNG', 'SĐT', 'DỊCH VỤ', 'NGÀY TẠO', 'TỔNG GIÁ TRỊ', 'ĐÃ THU', 'CÒN LẠI', 'KỲ THANH TOÁN KẾ TIẾP', 'HẠN', 'TRẠNG THÁI'],
+    ...list.map(c => {
+      const cust = byId(state.customers, c.customerId) || {};
+      const next = (c.schedule || []).find(r => !r.paid);
+      return [
+        c.code, custName(c.customerId), cust.phone || '', c.service || '', fmtDate(c.createdAt), +c.total || 0,
+        contractPaid(c), (+c.total || 0) - contractPaid(c), next ? next.label : 'Đã trả đủ', next && next.dueDate ? fmtDate(next.dueDate) : '',
+        CONTRACT_STATUS[c.status] || c.status,
+      ];
+    }),
+    [], ['TỔNG', '', '', '', '', list.reduce((s, c) => s + (+c.total || 0), 0), list.reduce((s, c) => s + contractPaid(c), 0), list.reduce((s, c) => s + (+c.total || 0) - contractPaid(c), 0)],
+  ], list.length + ' hợp đồng');
+}
+
 function exportAttendanceExcel() {
   const d = attMonthData();
   const rows = [
@@ -5266,6 +5340,7 @@ function payrollTab() {
   <div class="toolbar" style="margin-bottom:12px">
     <span style="font-size:13px;color:var(--text-2)">Lương = lương cơ bản + hoa hồng doanh thu các buổi chụp nhân sự phụ trách</span>
     <div class="spacer"></div>
+    <button class="btn btn-ghost" onclick="exportPayrollExcel()" title="Xuất bảng lương tháng này ra file Excel">${icon('download')} Xuất Excel</button>
     <button class="btn btn-primary" onclick="computePayroll('${month}')">${icon('refresh')} Tính lương tự động</button>
   </div>
   <div class="card list-wrap"><div class="table-wrap">
@@ -5368,6 +5443,7 @@ function contractsView() {
       ${Object.entries(CONTRACT_STATUS).map(([k, l]) => `<option value="${k}" ${v.status === k ? 'selected' : ''}>${l}</option>`).join('')}
     </select>
     <div class="spacer"></div>
+    <button class="btn btn-ghost" onclick="exportContractsExcel()" title="Xuất danh sách hợp đồng đang lọc ra file Excel">${icon('download')} Xuất Excel</button>
     <button class="btn btn-primary" onclick="openContractModal()">${icon('plus')} Tạo hợp đồng</button>
   </div>
   <div class="card list-wrap"><div class="table-wrap">
