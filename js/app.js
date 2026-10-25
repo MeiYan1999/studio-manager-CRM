@@ -578,7 +578,29 @@ function dashboardView() {
   }
   const maxRev = Math.max(...months.map(m => m.val), 1);
 
+  const hr = new Date().getHours();
+  const hello = hr < 11 ? 'Chào buổi sáng' : hr < 18 ? 'Chào buổi chiều' : 'Chào buổi tối';
+  const cu = currentUser() || { name: 'Studio' };
+  const dToday = todayStr();
+  const bkToday = state.bookings.filter(b => b.date === dToday && b.status !== 'cancelled' && branchMatch(b));
+  const heroLine = bkToday.length
+    ? `Hôm nay có <b>${bkToday.length} buổi chụp</b>${bkToday[0].startTime ? ' · bắt đầu lúc ' + esc(bkToday[0].startTime) : ''} — ${esc(custName(bkToday[0].customerId))}`
+    : 'Hôm nay không có lịch chụp — cả studio yên bình.';
+
   return `
+  <div class="dash-hero">
+    <div class="dash-hero-txt">
+      <div class="dash-kicker">${esc(state.settings.studioName)} · ${WD[new Date().getDay()]}, ${fmtDate(dToday)}</div>
+      <h2>${hello}, ${esc(cu.name || 'Studio')} 👋</h2>
+      <div class="dash-hero-line">${icon('camera')} ${heroLine}</div>
+    </div>
+    <div class="dash-hero-actions">
+      <button class="btn btn-gold" onclick="openCustomerModal()">${icon('plus')} Khách hàng</button>
+      <button class="btn btn-dark-ghost" onclick="openBookingModal()">${icon('calendar')} Lịch chụp</button>
+      <button class="btn btn-dark-ghost" onclick="navigate('finance')">${icon('money')} Tài chính</button>
+    </div>
+  </div>
+
   <div class="stat-grid">
     ${statCard('money', 'tint-indigo', fmtMoney(revThis), 'Doanh thu tháng này',
       delta === null ? `<span class="stat-sub muted">${icon('clock')} Tháng ${key.split('-')[1]}/${key.split('-')[0]}</span>`
@@ -593,10 +615,10 @@ function dashboardView() {
       <div class="card-head"><h3>Doanh thu 6 tháng gần nhất</h3><span class="right badge b-deposit">Đã thu</span></div>
       <div class="card-pad">
         <div class="chart">
-          ${months.map(m => `
+          ${months.map((m, i) => `
           <div class="bar-col" title="${m.label}: ${fmtMoney(m.val)}">
-            <div class="bar-val">${m.val > 0 ? fmtShort(m.val) : ''}</div>
-            <div class="bar" style="height:${Math.max(3, Math.round(m.val / maxRev * 100))}%"></div>
+            <div class="bar-val${i === months.length - 1 ? ' cur' : ''}">${m.val > 0 ? fmtShort(m.val) : ''}</div>
+            <div class="bar${i === months.length - 1 ? ' cur' : ''}" style="height:${Math.max(3, Math.round(m.val / maxRev * 100))}%"></div>
             <div class="bar-lbl">${m.label}</div>
           </div>`).join('')}
         </div>
@@ -645,9 +667,11 @@ function dashboardView() {
 }
 
 function statCard(ic, tint, val, label, sub) {
-  return `<div class="card stat-card">
+  return `<div class="card stat-card ${tint}">
     <div class="stat-icon ${tint}">${icon(ic)}</div>
-    <div><div class="stat-label">${label}</div><div class="stat-val">${val}</div>${sub || ''}</div>
+    <div class="stat-label">${label}</div>
+    <div class="stat-val">${val}</div>
+    ${sub || ''}
   </div>`;
 }
 function iconWrap(ic) { return `<div class="empty-icon">${icon(ic)}</div>`; }

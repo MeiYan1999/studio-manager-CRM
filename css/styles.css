@@ -671,3 +671,76 @@ tbody tr.row-overdue:hover { background: #ffe4e4; }
   .items-editor .items-head, .items-editor .item-row { grid-template-columns: 1fr 56px 96px 30px; }
   .item-total { display: none; }
 }
+
+/* ============ DASHBOARD PREMIUM — black & gold (theo palette Luxury của ui-ux-pro-max) ============ */
+.dash-hero {
+  display: flex; align-items: center; justify-content: space-between; gap: 18px; flex-wrap: wrap;
+  background: linear-gradient(135deg, #18181B 0%, #27272A 62%, #34322E 100%);
+  color: #FAFAFA; border: 1px solid #3F3F46; border-radius: 18px;
+  padding: 24px 28px; margin-bottom: 20px; position: relative; overflow: hidden;
+}
+.dash-hero::after {
+  content: ''; position: absolute; right: -70px; top: -90px; width: 280px; height: 280px; border-radius: 50%;
+  background: radial-gradient(circle, rgba(245, 158, 11, .17), transparent 65%); pointer-events: none;
+}
+.dash-hero-txt { position: relative; z-index: 1; min-width: 240px; }
+.dash-kicker {
+  color: #F59E0B; font-size: 10.5px; font-weight: 700; letter-spacing: .13em;
+  text-transform: uppercase; margin-bottom: 8px;
+}
+.dash-hero h2 { font-size: 24px; font-weight: 800; letter-spacing: -.02em; line-height: 1.2; }
+.dash-hero-line { color: #C9C9CE; font-size: 13px; margin-top: 7px; display: flex; align-items: center; gap: 7px; }
+.dash-hero-line .icon { width: 15px; height: 15px; color: #F59E0B; flex: none; }
+.dash-hero-line b { color: #FBBF24; }
+.dash-hero-actions { display: flex; gap: 10px; flex-wrap: wrap; position: relative; z-index: 1; }
+.btn-gold {
+  background: linear-gradient(180deg, #FBBF24, #D97706); color: #18181B; font-weight: 700;
+  border: none; box-shadow: 0 4px 14px rgba(217, 119, 6, .35);
+}
+.btn-gold:hover { filter: brightness(1.06); box-shadow: 0 6px 18px rgba(217, 119, 6, .45); }
+.btn-dark-ghost { background: rgba(255, 255, 255, .07); color: #FAFAFA; border: 1px solid rgba(255, 255, 255, .16); }
+.btn-dark-ghost:hover { background: rgba(255, 255, 255, .13); }
+
+/* KPI cards — dọc, thanh màu trên đỉnh, số lớn canh đều */
+.stat-card {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 9px;
+  padding: 20px 22px 18px; position: relative; overflow: hidden;
+  transition: transform .18s ease, box-shadow .18s ease;
+}
+.stat-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: #E2E8F0; }
+.stat-card.tint-indigo::before { background: linear-gradient(90deg, #6366F1, #A5B4FC); }
+.stat-card.tint-blue::before { background: linear-gradient(90deg, #0369A1, #38BDF8); }
+.stat-card.tint-green::before { background: linear-gradient(90deg, #059669, #6EE7B7); }
+.stat-card.tint-red::before { background: linear-gradient(90deg, #DC2626, #FCA5A5); }
+.stat-card:hover { transform: translateY(-3px); box-shadow: 0 12px 28px rgba(12, 10, 9, .10); }
+.stat-card .stat-icon { width: 42px; height: 42px; border-radius: 12px; }
+.stat-card .stat-label {
+  font-size: 10.5px; text-transform: uppercase; letter-spacing: .09em;
+  font-weight: 700; color: var(--text-3);
+}
+.stat-card .stat-val {
+  font-size: 25px; font-weight: 800; letter-spacing: -.02em; margin-top: 3px;
+  font-variant-numeric: tabular-nums;
+}
+.stat-card .stat-sub { margin-top: 6px; border-radius: 999px; padding: 3px 9px; background: #F1F5F9; }
+.stat-card .stat-sub.up { background: rgba(5, 150, 105, .13); }
+.stat-card .stat-sub.down { background: rgba(220, 38, 38, .13); }
+.stat-card .stat-sub.muted { background: #F1F5F9; }
+
+/* Biểu đồ cột — tháng hiện tại nổi bật vàng hổ phách */
+.chart .bar { background: linear-gradient(180deg, #B9C5D4, #8CA0B8); }
+.chart .bar.cur { background: linear-gradient(180deg, #FBBF24, #D97706); box-shadow: 0 5px 16px rgba(217, 119, 6, .35); }
+.chart .bar-val.cur { color: #B45309; }
+
+/* Tiêu đề card — dấu chấm vàng nhỏ */
+.card-head h3::before {
+  content: ''; display: inline-block; width: 7px; height: 7px; border-radius: 2.5px;
+  background: linear-gradient(135deg, #F59E0B, #B45309); margin-right: 9px;
+}
+.money, .bar-val, .stat-val { font-variant-numeric: tabular-nums; }
+
+@media (prefers-reduced-motion: reduce) {
+  .stat-card { transition: none; }
+  .stat-card:hover { transform: none; }
+  .dash-hero::after { display: none; }
+}
