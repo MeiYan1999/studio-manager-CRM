@@ -2531,7 +2531,7 @@ function openStudioModal() {
       <div class="field"><label>Giờ làm việc — giờ ra</label><input class="input" type="time" name="workEnd" value="${esc(st.workEnd || '18:00')}"></div>
       <div class="field full" style="background:#f8fafc;border:1px solid var(--border);border-radius:12px;padding:12px 14px">
         <label style="font-weight:700">📍 Vị trí chấm công (GPS)</label>
-        <p style="font-size:11.5px;color:var(--text-3);margin:4px 0 8px">Đặt toạ độ studio để khi nhân viên chấm công biết họ có đang ở studio hay không. Đứng TẠI studio rồi bấm nút bên dưới là chuẩn nhất.</p>
+        <p style="font-size:11.5px;color:var(--text-3);margin:4px 0 8px">Đây là vị trí <b>mặc định</b> cho nhân sự chưa gán chi nhánh. Mỗi chi nhánh cấu hình vị trí riêng trong <b>Hệ thống → Chi nhánh</b>. Khi chấm công, app so với vị trí gần nhất.</p>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
           <input class="input" name="studioLat" style="max-width:130px" placeholder="Vĩ độ (lat)" value="${st.studioLat || ''}">
           <input class="input" name="studioLng" style="max-width:130px" placeholder="Kinh độ (lng)" value="${st.studioLng || ''}">
@@ -3467,6 +3467,17 @@ function openBranchModal(id) {
       <div class="field"><label>Tên chi nhánh <span class="req">*</span></label><input class="input" id="brName" value="${esc(b ? b.name : '')}" placeholder="VD: Chi nhánh 3 — Bình Dương"></div>
       <div class="field"><label>Điện thoại</label><input class="input" id="brPhone" value="${esc(b ? b.phone : '')}"></div>
       <div class="field"><label>Địa chỉ</label><input class="input" id="brAddress" value="${esc(b ? b.address : '')}"></div>
+      <div class="field" style="background:#f8fafc;border:1px solid var(--border);border-radius:12px;padding:12px 14px">
+        <label style="font-weight:700">📍 Vị trí chấm công GPS của chi nhánh</label>
+        <p style="font-size:11.5px;color:var(--text-3);margin:4px 0 8px">Đứng TẠI chi nhánh rồi bấm "Lấy vị trí hiện tại" là chuẩn nhất. Nhân viên gán chi nhánh này chấm công gần toạ độ này sẽ hiện ✓ trong phạm vi.</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <input class="input" id="brLat" style="max-width:120px" placeholder="Vĩ độ (lat)" value="${b && b.lat ? b.lat : ''}">
+          <input class="input" id="brLng" style="max-width:120px" placeholder="Kinh độ (lng)" value="${b && b.lng ? b.lng : ''}">
+          <input class="input" id="brRadius" type="number" min="50" step="50" style="max-width:100px" title="Bán kính cho phép (mét)" value="${b && b.radius ? b.radius : 200}">
+          <button type="button" class="btn btn-ghost btn-sm" onclick="fillBranchGeo()">${icon('pin')} Lấy vị trí hiện tại</button>
+          <span class="cell-sub">bán kính m</span>
+        </div>
+      </div>
     </div>
     <div class="modal-foot">
       <button class="btn btn-ghost" onclick="openBranchesModal()">Hủy</button>
@@ -3474,10 +3485,19 @@ function openBranchModal(id) {
     </div>`, 'sm');
 }
 
+async function fillBranchGeo() {
+  toast('Đang lấy vị trí GPS…');
+  const g = await getPunchGeo();
+  if (!g) { toast('Không lấy được vị trí — kiểm tra quyền vị trí của trình duyệt', 'error'); return; }
+  $('#brLat').value = g.lat;
+  $('#brLng').value = g.lng;
+  toast('Đã lấy toạ độ ✓ — bấm Lưu để áp dụng');
+}
+
 function saveBranch(id) {
   const name = $('#brName').value.trim();
   if (!name) { toast('Nhập tên chi nhánh', 'error'); return; }
-  const data = { name, phone: $('#brPhone').value.trim(), address: $('#brAddress').value.trim() };
+  const data = { name, phone: $('#brPhone').value.trim(), address: $('#brAddress').value.trim(), lat: $('#brLat').value.trim(), lng: $('#brLng').value.trim(), radius: +$('#brRadius').value || 200 };
   if (id) Object.assign(byId(state.branches, id), data);
   else state.branches.push(Object.assign({ id: uid(), active: true }, data));
   logAction(id ? 'update' : 'create', 'settings', 'Chi nhánh: ' + name);
@@ -3888,22 +3908,32 @@ function studioGeo() {
   return (+st.studioLat && +st.studioLng) ? { lat: +st.studioLat, lng: +st.studioLng, radius: +st.studioRadius || 200 } : null;
 }
 
+// Mọi vị trí chấm công hợp lệ: từng chi nhánh + vị trí mặc định (settings)
+function geoTargets() {
+  const t = [];
+  (state.branches || []).forEach(b => { if (+b.lat && +b.lng) t.push({ name: b.name, lat: +b.lat, lng: +b.lng, radius: +b.radius || 200 }); });
+  const d = studioGeo();
+  if (d) t.push(Object.assign({ name: 'Vị trí mặc định' }, d));
+  return t;
+}
+
+// Vị trí chuẩn gần nhất với toạ độ chấm công (để so khoảng cách)
+function nearestGeoTarget(geo) {
+  let best = null;
+  geoTargets().forEach(t => { const d = geoDistKm(geo, t); if (d !== null && (!best || d < best.d)) best = { name: t.name, radius: t.radius, d }; });
+  return best;
+}
+
 function fmtDist(m) { return m >= 1000 ? (m / 1000).toFixed(1).replace('.', ',') + ' km' : Math.round(m) + ' m'; }
 
 function geoCellHtml(geo) {
   if (!geo) return '<span class="cell-sub">—</span>';
-  const sg = studioGeo();
-  let extra = '';
-  if (sg) {
-    const d = geoDistKm(geo, sg);
-    if (d !== null) {
-      const m = d * 1000;
-      extra = m <= sg.radius
-        ? `<div class="cell-sub" style="color:var(--green)">✓ ${fmtDist(m)} — trong phạm vi</div>`
-        : `<div class="cell-sub" style="color:var(--red)">⚠ ${fmtDist(m)} — xa studio</div>`;
-    }
-  }
-  return `<a class="link" href="https://maps.google.com/?q=${geo.lat},${geo.lng}" target="_blank" rel="noopener">${icon('pin')} ${geo.lat}, ${geo.lng}</a>${extra}`;
+  const map = `<a class="link" href="https://maps.google.com/?q=${geo.lat},${geo.lng}" target="_blank" rel="noopener">${icon('pin')} ${geo.lat}, ${geo.lng}</a>`;
+  const nt = nearestGeoTarget(geo);
+  if (!nt) return map;
+  const m = nt.d * 1000;
+  const ok = m <= nt.radius;
+  return map + `<div class="cell-sub" style="color:${ok ? 'var(--green)' : 'var(--red)'}">${ok ? '✓' : '⚠'} ${fmtDist(m)} — ${ok ? 'tại ' : 'xa '}${esc(nt.name)}</div>`;
 }
 
 async function selfPunch() {
@@ -3914,8 +3944,9 @@ async function selfPunch() {
   const geo = await getPunchGeo();
   const now = new Date();
   const time = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+  const nt = geo ? nearestGeoTarget(geo) : null;
   const where = geo
-    ? (studioGeo() ? (() => { const d = (geoDistKm(geo, studioGeo()) || 0) * 1000; return ' · 📍 ' + fmtDist(d) + ' từ studio'; })() : ' · 📍 đã ghi vị trí')
+    ? (nt ? ' · 📍 ' + fmtDist(nt.d * 1000) + (nt.d * 1000 <= nt.radius ? ' — tại ' + nt.name : ' — xa ' + nt.name) : ' · 📍 đã ghi vị trí')
     : ' · (không lấy được GPS)';
   const rec = attOf(u.staffId, todayStr());
   if (!rec) {
