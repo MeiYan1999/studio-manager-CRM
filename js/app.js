@@ -4035,7 +4035,7 @@ function renderTopbarAttendance() {
     ? `<span class="bell-wrap" style="display:inline-flex;align-items:center"><button class="icon-btn" title="Thông báo" onclick="navigate('notifications')"><svg class="icon"><use href="#i-alert"/></svg></button>${un ? `<span class="bell-dot">${un > 9 ? '9+' : un}</span>` : ''}</span>`
     : '';
   const clock = `<span class="live-clock" id="liveClock"></span>`;
-  if (!u.staffId) { box.innerHTML = `${clock}${bell}<button class="punch-btn done" title="Tài khoản chưa liên kết nhân sự — quản trị sửa trong Tài khoản & Quyền">${icon('clock')} Chấm công</button>`; startLiveClock(); return; }
+  if (!u.staffId) { box.innerHTML = `${clock}${bell}<button class="punch-btn done" style="cursor:pointer" title="Tài khoản chưa liên kết nhân sự — bấm để mở trang gán liên kết" onclick="toast('Gán \"Liên kết nhân sự\" cho tài khoản này để bật nút chấm công');navigate('accounts')">${icon('clock')} Chấm công — bấm để gán nhân sự</button>`; startLiveClock(); return; }
   const rec = attOf(u.staffId, todayStr());
   const btnIn = `<button class="punch-btn in" ${rec ? 'disabled' : ''} onclick="selfPunch()" title="${rec ? 'Đã vào ca lúc ' + rec.in : 'Ghi giờ chấm công vào ca (kèm GPS)'}">▶ Vào ca làm</button>`;
   const btnOut = rec && !rec.out
