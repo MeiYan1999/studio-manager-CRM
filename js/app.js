@@ -128,6 +128,7 @@ function blankState() {
 /* ---- Chế độ server (tùy chọn): Node.js + PostgreSQL, nhiều máy dùng chung ---- */
 let SERVER_MODE = false;
 let API_TOKEN = localStorage.getItem('mementoCRM_token') || '';
+let __serverHasUsers = null, __serverStudioName = ''; // hỏi server: đã có tài khoản chưa (máy mới chưa đăng nhập)
 let __saveTimer = null, __stateDirty = false;
 
 async function detectServer() {
@@ -2880,8 +2881,10 @@ function showAuth() {
 
 function renderAuthForm(err = '') {
   const box = $('#authBox');
-  $('#authStudioName').textContent = state.settings.studioName;
-  if (!state.users.length) {
+  $('#authStudioName').textContent = (SERVER_MODE && __serverStudioName) || state.settings.studioName;
+  // Chế độ server: căn cứ theo SERVER (máy mới localStorage trống nhưng server đã có tài khoản)
+  const showRegister = SERVER_MODE && __serverHasUsers !== null ? !__serverHasUsers : !state.users.length;
+  if (showRegister) {
     box.innerHTML = `
       <h2 class="auth-h">Tạo tài khoản quản trị</h2>
       <p class="auth-sub">Lần đầu sử dụng — hãy tạo tài khoản quản trị viên (đầy đủ quyền) cho studio.</p>
@@ -2938,6 +2941,13 @@ async function authLogin() {
 }
 
 async function authRegister() {
+  // Chế độ server: nếu server ĐÃ có tài khoản thì không cho đăng ký nữa (tránh tạo account ma trên máy lẻ)
+  if (SERVER_MODE) {
+    try {
+      const r = await fetch('/api/has-users');
+      if (r.ok && (await r.json()).users > 0) { renderAuthForm('Máy chủ đã có tài khoản — vui lòng đăng nhập bằng tài khoản hiện có'); return; }
+    } catch (e) { }
+  }
   const name = $('#rgName').value.trim();
   const username = $('#rgUser').value.trim().toLowerCase();
   const pw = $('#rgPass').value;
@@ -5054,6 +5064,12 @@ async function submitChangePwd() {
 /* ================= INIT ================= */
 async function init() {
   await detectServer();
+  if (SERVER_MODE && !API_TOKEN) {
+    try {
+      const r = await fetch('/api/has-users');
+      if (r.ok) { const j = await r.json(); __serverHasUsers = j.users > 0; __serverStudioName = j.studioName || ''; }
+    } catch (e) { }
+  }
   let loaded = false;
   if (SERVER_MODE && API_TOKEN) {
     try { adoptState(await loadFromServer()); loaded = true; }

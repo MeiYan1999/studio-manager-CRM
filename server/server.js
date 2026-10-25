@@ -55,6 +55,18 @@ const authUser = (req) => {
 // Frontend dùng endpoint này để tự dò có đang chạy chế độ server hay không
 app.get('/api/ping', (req, res) => res.json({ ok: true, mode: 'server', time: new Date().toISOString() }));
 
+// Máy mới chưa đăng nhập cần biết server đã có tài khoản chưa (hiện Đăng nhập thay vì Đăng ký)
+app.get('/api/has-users', async (req, res) => {
+  try {
+    const st = await getState();
+    res.json({
+      ok: true,
+      users: (st && Array.isArray(st.users)) ? st.users.length : 0,
+      studioName: ((st && st.settings) || {}).studioName || '',
+    });
+  } catch (e) { res.status(500).json({ error: 'Lỗi máy chủ: ' + e.message }); }
+});
+
 // Đăng nhập: kiểm tra mật khẩu PHÍA SERVER, cấp token
 app.post('/api/login', async (req, res) => {
   try {
