@@ -774,3 +774,10 @@ tbody tr.row-overdue:hover { background: #ffe4e4; }
 .sp-sel.sp-off { background: #f1f5f9; border-color: #cbd5e1; color: #64748b; text-decoration: line-through; }
 .sp-table th.sp-today, .sp-table td.sp-today { background: #fffbeb; }
 .sp-table tfoot td { border-top: 2px solid var(--border); font-size: 11.5px; padding: 8px 6px; background: #f8fafc; }
+.sp-note {
+  width: 100%; min-width: 118px; margin-top: 2px; padding: 3px 4px;
+  font-size: 10.5px; text-align: center; color: #64748b;
+  background: transparent; border: none; border-bottom: 1px dashed #cbd5e1;
+}
+.sp-note:focus { outline: none; border-bottom-color: #f59e0b; background: #fffbeb; color: var(--text-1); }
+.sp-note::placeholder { color: #cbd5e1; }

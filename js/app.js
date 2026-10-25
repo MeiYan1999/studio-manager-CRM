@@ -129,7 +129,7 @@ function blankState() {
     outfits: [], concepts: [], loans: [],
     users: [],
     logs: [],
-    expenses: [], payrolls: [], contracts: [], cash: [], shiftPlan: {},
+    expenses: [], payrolls: [], contracts: [], cash: [], shiftPlan: {}, shiftNotes: {},
     attendance: [],
     departments: [], roleGroups: [],
     notifications: [],
@@ -321,6 +321,7 @@ function migrateLegacy(parsed) {
   if (!Array.isArray(p.expenses)) { state.expenses = seedExpenses(); changed = true; }
   if (!Array.isArray(p.cash)) { state.cash = seedCash(); changed = true; }
   if (!p.shiftPlan) { state.shiftPlan = {}; changed = true; }
+  if (!p.shiftNotes) { state.shiftNotes = {}; changed = true; }
   (state.users || []).forEach(u => { if (Array.isArray(u.perms) && u.perms.includes('shifts') && !u.perms.includes('shiftplan')) { u.perms.push('shiftplan'); changed = true; } });
   if (!Array.isArray(p.contracts)) { state.contracts = seedContracts(); state.contractSeq = 1003; changed = true; }
   else if (!p.contractSeq) state.contractSeq = 1003;
@@ -4096,7 +4097,9 @@ function shiftplanView() {
             const def = !k ? shiftOf(s) : null;
             return `<option value="${k}" ${cellVal(d, s) === k ? 'selected' : ''}>${k === '' ? '· ' + def.short + ' (mặc định)' : k === 'off' ? 'Nghỉ' : sh.label}</option>`;
           }).join('')}
-        </select></td>`).join('')}
+        </select>
+        <input class="sp-note" placeholder="ghi chú…" title="Ghi chú nhanh — VD: Đổ rác, Quét lau tầng 2" value="${esc((((state.shiftNotes || {})[d]) || {})[s.id] || '')}" oninput="spSetNote('${d}','${s.id}',this.value)">
+      </td>`).join('')}
     </tr>`).join('') || emptyRow(9, 'Chưa có nhân sự đang hoạt động')}
     </tbody>
     <tfoot><tr>
@@ -4117,6 +4120,16 @@ function spSet(date, staffId, val) {
   save();
   // vẽ lại màu ô mà không render cả trang (giữ focus)
   render();
+}
+
+let __noteTimer = null;
+function spSetNote(date, staffId, val) {
+  state.shiftNotes = state.shiftNotes || {};
+  if (!state.shiftNotes[date]) state.shiftNotes[date] = {};
+  if (val.trim()) state.shiftNotes[date][staffId] = val.trim();
+  else delete state.shiftNotes[date][staffId];
+  clearTimeout(__noteTimer);
+  __noteTimer = setTimeout(() => save(), 600); // lưu trễ — không render lại để không mất con trỏ đang gõ
 }
 
 function spFillDefaults(week) {
