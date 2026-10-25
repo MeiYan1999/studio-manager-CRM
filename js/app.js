@@ -76,9 +76,10 @@ const SHIFTS = {
 const shiftOf = s => SHIFTS[(s && s.shift) || 'normal'] || SHIFTS.normal;
 
 // ---- Nhật ký cập nhật (changelog) ----
-const APP_VERSION = '3.7';
+const APP_VERSION = '3.8';
 const CL_KIND = { new: ['✨ mới', 'b-delivered'], fix: ['🐛 sửa lỗi', 'b-unpaid'], ui: ['🎨 giao diện', 'b-deposit'], imp: ['⚡ nâng cấp', 'b-confirmed'] };
 const CHANGELOG = [
+  { v: '3.8', d: '26/10/2026', items: [['ui', 'Cổng khách chọn ảnh kiểu Snappic: lưới ảnh THẬT (thumbnail Google Drive) vuông + nút tim trên từng ảnh (tim đỏ nảy khi chọn) + mã ảnh góc + nút ghi chú; thanh đếm "Đã chọn X/Y" dính đáy kèm Copy mã & Gửi Studio'], ['new', 'Tạo album: dán DANH SÁCH link từng ảnh Drive (mỗi dòng 1 link) → tự bung lưới ảnh thật cho khách thả tim'], ['fix', 'Lỗi danh sách ảnh mới nhận nhầm trạng thái đã chọn từ lưới xem trước cũ']] },
   { v: '3.7', d: '26/10/2026', items: [['ui', 'Tạo Album thành 3 bước gọn: dán link Google Drive → nhập số ảnh (tự sinh mã A01…) → copy link thả tim ❤ gửi khách'], ['new', 'Cổng khách nhúng khung xem ảnh Google Drive thật ngay trên trang thả tim (Drive chia sẻ kiểu ai-có-link)']] },
   { v: '3.6', d: '26/10/2026', items: [['new', 'Chấm công di chuyển chi nhánh: GPS ghi cả lúc thoát ca; nếu vào ca không ở chi nhánh nào thì ngày công ghi nhận theo chi nhánh khớp GPS thoát ca — hiện nhãn "Làm tại: Chi nhánh…" và 2 dòng vị trí Vào/Ra kèm bản đồ']] },
   { v: '3.5', d: '26/10/2026', items: [['ui', 'Thanh trên: đồng hồ Việt Nam chạy từng giây (giờ:phút:giây + thứ, ngày/tháng/năm) cạnh 2 nút "Vào ca làm" / "Thoát ca làm" luôn hiển thị — nút không khả dụng tự mờ đi']] },
@@ -5581,6 +5582,17 @@ function driveFolderId(url) {
   return m ? m[1] : '';
 }
 
+// Tách FILE ID từ chuỗi nhiều link Google Drive (mỗi link 1 file, dán cách nhau xuống dòng/phẩy)
+function driveFileIds(text) {
+  const ids = [];
+  String(text || '').split(/[\s,;]+/).forEach(tok => {
+    const m = tok.match(/\/file\/d\/([A-Za-z0-9_-]{10,})/) || tok.match(/[?&]id=([A-Za-z0-9_-]{10,})/);
+    if (m && !ids.includes(m[1])) ids.push(m[1]);
+  });
+  return ids;
+}
+const driveThumb = (id, w) => `https://drive.google.com/thumbnail?id=${id}&sz=w${w || 600}`;
+
 function openGalleryModal(bookingId) {
   const b = byId(state.bookings, bookingId);
   if (!b) return;
@@ -5596,9 +5608,14 @@ function openGalleryModal(bookingId) {
     <div class="modal-body" style="max-height:66vh;overflow-y:auto">
       <div style="display:flex;gap:16px;flex-wrap:wrap">
         <div style="flex:1.4;min-width:300px">
-          <div class="field"><label>${icon('pin')} BƯỚC 1 — Dán link thư mục Google Drive chứa ảnh</label>
-            <input class="input" id="galSource" style="font-size:13px" value="${esc(g.sourceUrl || '')}" placeholder="https://drive.google.com/drive/folders/..." oninput="galDriveHint(this.value)">
+          <div class="field"><label>${icon('pin')} BƯỚC 1 — Link ảnh Google Drive</label>
+            <input class="input" id="galSource" style="font-size:13px" value="${esc(g.sourceUrl || '')}" placeholder="Link thư mục Drive (tuỳ chọn)..." oninput="galDriveHint(this.value)">
             <div class="form-hint" id="galDriveHint">${did ? '✓ Link Drive hợp lệ — khách sẽ xem được ảnh ngay trong link chọn' : 'Trên Drive: chuột phải thư mục ảnh → Chia sẻ → "Ai có link" → Copy link'}</div>
+            <div style="margin-top:10px;padding:10px 12px;background:#f8fafc;border:1px dashed var(--border);border-radius:12px">
+              <label style="font-size:12px;font-weight:800">🖼 Dán link TỪNG ẢNH Drive để hiện ảnh thật trong lưới thả tim (khuyên dùng)</label>
+              <textarea class="textarea" id="galFiles" style="min-height:74px;font-size:11px;margin-top:6px" placeholder="Mỗi dòng 1 link ảnh, VD:&#10;https://drive.google.com/file/d/1AbC.../view&#10;https://drive.google.com/file/d/1XyZ.../view&#10;(trên Drive: chọn ảnh → chuột phải → Chia sẻ → Copy link)" oninput="galFilesHint()">${esc((g.photos || []).filter(p => p.fileId).map(p => 'https://drive.google.com/file/d/' + p.fileId + '/view').join('\n'))}</textarea>
+              <div class="form-hint" id="galFilesHint">${(g.photos || []).some(p => p.fileId) ? '✓ Đang có ' + g.photos.filter(p => p.fileId).length + ' ảnh thật — khách sẽ thấy lưới ảnh + nút tim' : 'Dán link từng ảnh vào đây → khách thấy ẢNH THẬT ngay trong link thả tim (chia sẻ kiểu ai-có-link)'}</div>
+            </div>
             <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
               <button class="btn btn-ghost btn-sm" onclick="scanIntoGallery('${b.id}')" title="Lấy mã ảnh từ thư mục máy/NAS thay vì gõ">${icon('refresh')} Quét mã ảnh từ thư mục máy</button>
             </div>
@@ -5655,6 +5672,11 @@ function openGalleryModal(bookingId) {
 function galDriveHint(v) {
   const el = $('#galDriveHint');
   if (el) el.innerHTML = driveFolderId(v) ? '✓ Link Drive hợp lệ — khách sẽ xem được ảnh ngay trong link chọn' : 'Chưa nhận dạng được thư mục Drive — kiểm tra link dạng drive.google.com/drive/folders/…';
+}
+function galFilesHint() {
+  const ids = driveFileIds(($('#galFiles') || {}).value || '');
+  const el = $('#galFilesHint');
+  if (el) el.innerHTML = ids.length ? '✓ Nhận ' + ids.length + ' ảnh — bấm "Tạo Link Chọn Ảnh" để cập nhật' : 'Dán link từng ảnh vào đây → khách thấy ẢNH THẬT ngay trong link thả tim (chia sẻ kiểu ai-có-link)';
 }
 function galGenPreview() { /* cập nhật số trên nút lưu khi đổi số lượng */ const el = document.querySelector('#modalRoot .modal-foot .btn-primary'); if (el) el.innerHTML = `${icon('check')} Tạo Link Chọn Ảnh (${Math.min(500, Math.max(1, +(($('#galCount') || {}).value || 30)))} ảnh)`; }
 
@@ -5826,12 +5848,26 @@ function saveGallery(bookingId, reopen) {
   g.greeting = $('#galGreeting') ? $('#galGreeting').value.trim() : (g.greeting || '');
   const srcEl = $('#galSource');
   if (srcEl) { g.sourceUrl = srcEl.value.trim(); g.driveId = driveFolderId(g.sourceUrl); }
+  // Danh sách link từng ảnh Drive → lưới ảnh thật cho khách thả tim
+  let rebuiltFromFiles = false;
+  const filesEl = $('#galFiles');
+  if (filesEl) {
+    const ids = driveFileIds(filesEl.value);
+    if (ids.length) {
+      rebuiltFromFiles = true;
+      const old = b.gallery.photos || [];
+      b.gallery.photos = ids.map((fid, i) => {
+        const prev = old.find(p => p.fileId === fid);
+        return prev || { id: uid(), fileId: fid, code: 'A' + pad(i + 1), name: 'Ảnh ' + pad(i + 1), selected: false };
+      });
+    }
+  }
   // Chưa có mã ảnh → tự sinh theo số lượng đã nhập
   if (!b.gallery.photos.length && $('#galCount')) {
     const n = Math.min(500, Math.max(1, +$('#galCount').value || 30));
     b.gallery.photos = Array.from({ length: n }, (_, i) => ({ id: uid(), code: 'A' + pad(i + 1), name: 'Ảnh ' + pad(i + 1), selected: false }));
   }
-  const tiles = $$('#modalRoot .photo-tile');
+  const tiles = rebuiltFromFiles ? [] : $$('#modalRoot .photo-tile');
   if (tiles.length) {
     const selCodes = new Set($$('#modalRoot .photo-tile.sel').map(t => t.querySelector('.pc').textContent));
     b.gallery.photos.forEach(p => { p.selected = selCodes.has(p.code); });
@@ -5924,24 +5960,51 @@ async function renderPortalScreen(token) {
       ${b.gallery.includedQty && selCount > b.gallery.includedQty ? `<div class="auth-error" style="display:flex;background:#fffbeb;border-color:#fde68a;color:#92400e">⚠ Bạn đã chọn vượt ${selCount - b.gallery.includedQty} ảnh so với gói${b.gallery.extraPrice ? ' — phụ thu ' + fmtMoney((selCount - b.gallery.includedQty) * b.gallery.extraPrice) : ''}. Có thể bỏ bớt tim nếu muốn.</div>` : ''}
       ${photos.length ? (allowSelect
         ? `<p style="font-size:12.5px;color:var(--text-2);margin-bottom:12px">Bấm <b>❤ thả tim</b> vào ảnh bạn thích${b.gallery.allowNotes !== false ? ', có thể <b>✎ ghi chú yêu cầu sửa</b> cho từng ảnh' : ''} rồi bấm <b>Gửi Studio</b>.</p>
-           <div class="photo-grid">${photos.map(p => `
-           <div class="photo-tile ${p.selected ? 'sel' : ''}" data-pid="${p.id}" onclick="this.classList.toggle('sel');this.querySelector('.tick').textContent=this.classList.contains('sel')?'❤ đã chọn':''">
-             ${b.gallery.watermark ? `<div class="wm">© ${esc(state.settings.studioName)}</div>` : ''}
-             <div class="pc">${esc(p.code)}</div><div class="pn">${esc(p.name)}</div><div class="tick">${p.selected ? '❤' + (p.note ? ' 📝' : '') + ' đã chọn' : ''}</div>
-             ${b.gallery.allowNotes !== false ? `<div style="font-size:10px;margin-top:2px"><a class="link" style="font-size:10px" onclick="event.stopPropagation();portalPhotoNote('${token}','${p.id}')">✎ ghi chú sửa</a>${p.note ? `<div class="cell-sub" style="font-size:9.5px;margin-top:2px">${esc(p.note)}</div>` : ''}</div>` : ''}
-           </div>`).join('')}</div>
-           <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap">
-             <button class="btn btn-ghost" style="flex:1" onclick="portalCopyCodes('${token}')">${icon('receipt')} Copy mã ảnh đã chọn</button>
-             ${b.gallery.allowSubmit !== false ? `<button class="btn btn-primary" style="flex:1" onclick="portalSaveSelection('${token}')">${icon('check')} Gửi Studio</button>` : ''}
-             ${b.gallery.allowDownload && /^https?:/.test(b.gallery.sourceUrl || '') ? `<a class="btn btn-ghost" style="flex:1;text-decoration:none" href="${esc(b.gallery.sourceUrl)}" target="_blank" rel="noopener">${icon('download')} Tải ảnh gốc</a>` : ''}
-           </div>
-           ${b.gallery.sourceUrl && !/^https?:/.test(b.gallery.sourceUrl) && b.gallery.allowDownload ? `<div class="cell-sub" style="text-align:center;margin-top:8px">Ảnh gốc: ${esc(b.gallery.sourceUrl)}</div>` : ''}`
+           ${portalGridHtml(photos, b.gallery, token, 'local', state.settings.studioName)}`
         : `<p style="font-size:12.5px;color:var(--text-2)">Danh sách ảnh đã sẵn sàng. Studio sẽ mở tính năng chọn ảnh khi hậu kỳ xong — bạn vui lòng quay lại sau nhé.</p>
            <div class="photo-grid" style="opacity:.65">${photos.map(p => `<div class="photo-tile"><div class="pc">${esc(p.code)}</div><div class="pn">${esc(p.name)}</div></div>`).join('')}</div>`)
       : `<p style="font-size:12.5px;color:var(--text-2)">Ảnh sẽ được studio cập nhật sau buổi chụp. Bạn có thể theo dõi tiến độ ở trên.</p>`}
     </div>
     <div style="text-align:center"><button class="btn btn-ghost" onclick="location.hash='dashboard'">Về trang chủ studio</button></div>
   </div>`;
+}
+
+// Lưới chọn ảnh kiểu Snappic — ảnh thật từ Drive file link + nút tim trên từng ảnh
+function portalGridHtml(photos, g, token, mode, studioName) {
+  const noteFn = mode === 'remote' ? 'portalRemoteNote' : 'portalPhotoNote';
+  const copyFn = mode === 'remote' ? 'portalRemoteCopy' : 'portalCopyCodes';
+  const sendFn = mode === 'remote' ? 'portalRemoteSubmit' : 'portalSaveSelection';
+  const hasImg = photos.some(p => p.fileId);
+  const selN = photos.filter(p => p.selected).length;
+  const tile = p => p.fileId ? `
+    <div class="photo-tile img ${p.selected ? 'sel' : ''}" data-pid="${p.id}" onclick="this.classList.toggle('sel');portalCnt(this)">
+      <img src="${driveThumb(p.fileId, 600)}" loading="lazy" alt="${esc(p.code)}">
+      ${g.watermark ? `<div class="wm">© ${esc(studioName)}</div>` : ''}
+      <span class="tile-code">${esc(p.code)}</span>
+      <span class="tile-heart">${p.selected ? '❤' : '♡'}</span>
+      ${g.allowNotes !== false ? `<a class="tile-note" title="Ghi chú yêu cầu sửa ảnh" onclick="event.stopPropagation();${noteFn}('${token}','${p.id}')">✎</a>` : ''}
+    </div>` : `
+    <div class="photo-tile ${p.selected ? 'sel' : ''}" data-pid="${p.id}" onclick="this.classList.toggle('sel');this.querySelector('.tick').textContent=this.classList.contains('sel')?'❤ đã chọn':''">
+      ${g.watermark ? `<div class="wm">© ${esc(studioName)}</div>` : ''}
+      <div class="pc">${esc(p.code)}</div><div class="pn">${esc(p.name)}</div><div class="tick">${p.selected ? '❤' + (p.note ? ' 📝' : '') + ' đã chọn' : ''}</div>
+      ${g.allowNotes !== false ? `<div style="font-size:10px;margin-top:2px"><a class="link" style="font-size:10px" onclick="event.stopPropagation();${noteFn}('${token}','${p.id}')">✎ ghi chú sửa</a>${p.note ? `<div class="cell-sub" style="font-size:9.5px;margin-top:2px">${esc(p.note)}</div>` : ''}</div>` : ''}
+    </div>`;
+  return `<div class="photo-grid ${hasImg ? 'grid-img' : ''}">${photos.map(tile).join('')}</div>
+  <div class="portal-sendbar">
+    <span class="cnt">❤ Đã chọn <b id="sbCnt">${selN}</b>/${g.includedQty || photos.length}${g.includedQty ? ' ảnh gói' : ' ảnh'}</span>
+    <div style="flex:1"></div>
+    <button class="btn btn-ghost btn-sm" onclick="${copyFn}('${token}')">${icon('receipt')} Copy mã</button>
+    ${g.allowSubmit !== false ? `<button class="btn btn-primary btn-sm" onclick="${sendFn}('${token}')">${icon('check')} Gửi Studio</button>` : ''}
+    ${g.allowDownload && /^https?:/.test(g.sourceUrl || '') ? `<a class="btn btn-ghost btn-sm" style="text-decoration:none" href="${esc(g.sourceUrl)}" target="_blank" rel="noopener">${icon('download')} Ảnh gốc</a>` : ''}
+  </div>`;
+}
+
+function portalCnt(el) {
+  const grid = el.closest('.photo-grid');
+  const n = grid ? grid.querySelectorAll('.photo-tile.sel').length : 0;
+  document.querySelectorAll('#sbCnt').forEach(s => s.textContent = n);
+  const h = el.querySelector('.tile-heart');
+  if (h) h.textContent = el.classList.contains('sel') ? '❤' : '♡';
 }
 
 /* ---- Portal chế độ online: máy khách không có dữ liệu local → tải từ server ---- */
@@ -6009,17 +6072,7 @@ async function renderPortalRemote(token) {
       ${g.includedQty && selCount > g.includedQty ? `<div class="auth-error" style="display:flex;background:#fffbeb;border-color:#fde68a;color:#92400e">⚠ Bạn đã chọn vượt ${selCount - g.includedQty} ảnh so với gói${g.extraPrice ? ' — phụ thu ' + fmtMoney((selCount - g.includedQty) * g.extraPrice) : ''}. Có thể bỏ bớt tim nếu muốn.</div>` : ''}
       ${photos.length ? (allowSelect
         ? `<p style="font-size:12.5px;color:var(--text-2);margin-bottom:12px">Bấm <b>❤ thả tim</b> vào ảnh bạn thích${g.allowNotes !== false ? ', có thể <b>✎ ghi chú yêu cầu sửa</b> cho từng ảnh' : ''} rồi bấm <b>Gửi Studio</b>.</p>
-           <div class="photo-grid">${photos.map(p => `
-           <div class="photo-tile ${p.selected ? 'sel' : ''}" data-pid="${p.id}" onclick="this.classList.toggle('sel');this.querySelector('.tick').textContent=this.classList.contains('sel')?'❤ đã chọn':''">
-             ${g.watermark ? `<div class="wm">© ${esc(d.studioName)}</div>` : ''}
-             <div class="pc">${esc(p.code)}</div><div class="pn">${esc(p.name)}</div><div class="tick">${p.selected ? '❤' + (p.note ? ' 📝' : '') + ' đã chọn' : ''}</div>
-             ${g.allowNotes !== false ? `<div style="font-size:10px;margin-top:2px"><a class="link" style="font-size:10px" onclick="event.stopPropagation();portalRemoteNote('${token}','${p.id}')">✎ ghi chú sửa</a>${p.note ? `<div class="cell-sub" style="font-size:9.5px;margin-top:2px">${esc(p.note)}</div>` : ''}</div>` : ''}
-           </div>`).join('')}</div>
-           <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap">
-             <button class="btn btn-ghost" style="flex:1" onclick="portalRemoteCopy('${token}')">${icon('receipt')} Copy mã ảnh đã chọn</button>
-             ${g.allowSubmit !== false ? `<button class="btn btn-primary" style="flex:1" onclick="portalRemoteSubmit('${token}')">${icon('check')} Gửi Studio</button>` : ''}
-             ${g.allowDownload && /^https?:/.test(g.sourceUrl || '') ? `<a class="btn btn-ghost" style="flex:1;text-decoration:none" href="${esc(g.sourceUrl)}" target="_blank" rel="noopener">${icon('download')} Tải ảnh gốc</a>` : ''}
-           </div>`
+           ${portalGridHtml(photos, g, token, 'remote', d.studioName)}`
         : `<p style="font-size:12.5px;color:var(--text-2)">Danh sách ảnh đã sẵn sàng. Studio sẽ mở tính năng chọn ảnh khi hậu kỳ xong — bạn vui lòng quay lại sau nhé.</p>
            <div class="photo-grid" style="opacity:.65">${photos.map(p => `<div class="photo-tile"><div class="pc">${esc(p.code)}</div><div class="pn">${esc(p.name)}</div></div>`).join('')}</div>`)
       : `<p style="font-size:12.5px;color:var(--text-2)">Ảnh sẽ được studio cập nhật sau buổi chụp. Bạn có thể theo dõi tiến độ ở trên.</p>`}
