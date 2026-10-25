@@ -94,9 +94,9 @@ let currentView = 'dashboard';
 let calY = new Date().getFullYear();
 let calM = new Date().getMonth();
 const viewState = {
-  customers: { q: '', type: 'all' },
+  customers: { q: '', type: 'all', month: '' },
   bookings: { mode: 'calendar', q: '', status: 'all' },
-  orders: { q: '', pay: 'all' },
+  orders: { q: '', pay: 'all', month: '' },
   tasks: { assignee: 'all' },
   wardrobe: { tab: 'items', q: '', cat: 'all', loanQ: '', loanStatus: 'all' },
   logs: { q: '', user: 'all', action: 'all' },
@@ -689,6 +689,10 @@ function customersView() {
       <option value="individual" ${viewState.customers.type === 'individual' ? 'selected' : ''}>Cá nhân</option>
       <option value="company" ${viewState.customers.type === 'company' ? 'selected' : ''}>Doanh nghiệp</option>
     </select>
+    <select class="select" style="width:auto" title="Xem theo tháng" onchange="viewState.customers.month=this.value;renderCustRows()">
+      ${monthOptions(viewState.customers.month, state.customers.map(c => c.createdAt))}
+    </select>
+    <span class="badge b-khac" id="custSum">${custSumText()}</span>
     <div class="spacer"></div>
     <button class="btn btn-primary" onclick="openCustomerModal()">${icon('plus')} Thêm khách hàng</button>
   </div>
@@ -702,14 +706,33 @@ function customersView() {
   </div>`;
 }
 
-function custRows() {
-  const { q, type } = viewState.customers;
+// Dropdown chọn tháng (từ dữ liệu thật + năm hiện tại), 'YYYY-MM' hoặc '' = tất cả
+function monthOptions(sel, dates) {
+  const ys = [...new Set([...dates.map(d => (d || '').slice(0, 4)).filter(Boolean), String(new Date().getFullYear())])].sort().reverse();
+  let html = `<option value="" ${!sel ? 'selected' : ''}>Mọi tháng</option>`;
+  ys.forEach(y => { for (let m = 12; m >= 1; m--) { const v = y + '-' + String(m).padStart(2, '0'); html += `<option value="${v}" ${sel === v ? 'selected' : ''}>Tháng ${m}/${y}</option>`; } });
+  return html;
+}
+
+function custFiltered() {
+  const { q, type, month } = viewState.customers;
   const ql = q.trim().toLowerCase();
-  const list = state.customers
+  return state.customers
     .filter(c => type === 'all' || c.type === type)
+    .filter(c => !month || (c.createdAt || '').startsWith(month))
     .filter(c => !ql || [c.name, c.phone, c.email, c.address].some(v => String(v || '').toLowerCase().includes(ql)))
     .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
-  if (!list.length) return emptyRow(6, 'Không tìm thấy khách hàng nào');
+}
+
+function custSumText() {
+  const list = custFiltered();
+  const spend = list.reduce((s, c) => s + spentOf(c.id), 0);
+  return `${list.length} khách${viewState.customers.month ? ' trong tháng ' + (+viewState.customers.month.slice(5)) + '/' + viewState.customers.month.slice(0, 4) : ''} · chi tiêu ${fmtShort(spend)}₫`;
+}
+
+function custRows() {
+  const list = custFiltered();
+  if (!list.length) return emptyRow(6, viewState.customers.month ? 'Không có khách hàng nào trong tháng này' : 'Không tìm thấy khách hàng nào');
   return list.map(c => {
     const bks = state.bookings.filter(b => b.customerId === c.id).length;
     return `<tr>
@@ -733,7 +756,12 @@ function custRows() {
 
 function onCustomerSearch(v) {
   viewState.customers.q = v;
-  $('#custRows').innerHTML = custRows();
+  renderCustRows();
+}
+
+function renderCustRows() {
+  const tb = $('#custRows'); if (tb) tb.innerHTML = custRows();
+  const sum = $('#custSum'); if (sum) sum.textContent = custSumText();
 }
 
 function openCustomerModal(id) {
@@ -1852,6 +1880,10 @@ function ordersView() {
       <option value="deposit" ${vs.pay === 'deposit' ? 'selected' : ''}>Đã cọc</option>
       <option value="unpaid" ${vs.pay === 'unpaid' ? 'selected' : ''}>Chưa thanh toán</option>
     </select>
+    <select class="select" style="width:auto" title="Xem theo tháng" onchange="viewState.orders.month=this.value;renderOrderRows()">
+      ${monthOptions(vs.month, state.orders.map(o => o.createdAt))}
+    </select>
+    <span class="badge b-deposit" id="orderSum">${orderSumText()}</span>
     <div class="spacer"></div>
     <button class="btn btn-primary" onclick="openOrderModal()">${icon('plus')} Tạo đơn hàng</button>
   </div>
@@ -1865,15 +1897,27 @@ function ordersView() {
   </div>`;
 }
 
-function orderRows() {
-  const { q, pay } = viewState.orders;
+function orderFiltered() {
+  const { q, pay, month } = viewState.orders;
   const ql = q.trim().toLowerCase();
-  const list = state.orders
+  return state.orders
     .filter(o => pay === 'all' || payStatus(o) === pay)
     .filter(o => branchMatch(o))
+    .filter(o => !month || (o.createdAt || '').startsWith(month))
     .filter(o => !ql || [o.code, custName(o.customerId)].some(v => String(v || '').toLowerCase().includes(ql)))
     .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
-  if (!list.length) return emptyRow(8, 'Không có đơn hàng phù hợp');
+}
+
+function orderSumText() {
+  const list = orderFiltered();
+  const rev = list.reduce((s, o) => s + orderTotal(o), 0);
+  const remain = list.reduce((s, o) => s + orderRemaining(o), 0);
+  return `${list.length} đơn${viewState.orders.month ? ' tháng ' + (+viewState.orders.month.slice(5)) + '/' + viewState.orders.month.slice(0, 4) : ''} · thu ${fmtShort(rev)}₫${remain > 0 ? ' · còn ' + fmtShort(remain) + '₫' : ''}`;
+}
+
+function orderRows() {
+  const list = orderFiltered();
+  if (!list.length) return emptyRow(8, viewState.orders.month ? 'Không có đơn hàng nào trong tháng này' : 'Không có đơn hàng phù hợp');
   return list.map(o => {
     const main = o.items[0] ? o.items[0].name : '—';
     const more = o.items.length > 1 ? ` +${o.items.length - 1}` : '';
@@ -1896,7 +1940,10 @@ function orderRows() {
   }).join('');
 }
 
-function renderOrderRows() { $('#orderRows').innerHTML = orderRows(); }
+function renderOrderRows() {
+  const tb = $('#orderRows'); if (tb) tb.innerHTML = orderRows();
+  const sum = $('#orderSum'); if (sum) sum.textContent = orderSumText();
+}
 
 function itemRowHtml(item = { name: '', qty: 1, price: 0 }, pkgId = '') {
   return `<div class="item-row" data-pkg="${pkgId}">
