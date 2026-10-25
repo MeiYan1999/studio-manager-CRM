@@ -2529,11 +2529,31 @@ function openStudioModal() {
       <div class="field full"><label>Địa chỉ</label><input class="input" name="address" value="${esc(st.address)}"></div>
       <div class="field"><label>Giờ làm việc — giờ vào</label><input class="input" type="time" name="workStart" value="${esc(st.workStart || '09:00')}"></div>
       <div class="field"><label>Giờ làm việc — giờ ra</label><input class="input" type="time" name="workEnd" value="${esc(st.workEnd || '18:00')}"></div>
+      <div class="field full" style="background:#f8fafc;border:1px solid var(--border);border-radius:12px;padding:12px 14px">
+        <label style="font-weight:700">📍 Vị trí chấm công (GPS)</label>
+        <p style="font-size:11.5px;color:var(--text-3);margin:4px 0 8px">Đặt toạ độ studio để khi nhân viên chấm công biết họ có đang ở studio hay không. Đứng TẠI studio rồi bấm nút bên dưới là chuẩn nhất.</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <input class="input" name="studioLat" style="max-width:130px" placeholder="Vĩ độ (lat)" value="${st.studioLat || ''}">
+          <input class="input" name="studioLng" style="max-width:130px" placeholder="Kinh độ (lng)" value="${st.studioLng || ''}">
+          <input class="input" name="studioRadius" type="number" min="50" step="50" style="max-width:110px" title="Bán kính cho phép (mét)" value="${st.studioRadius || 200}">
+          <button type="button" class="btn btn-ghost btn-sm" onclick="fillStudioGeo()">${icon('pin')} Lấy vị trí hiện tại</button>
+          <span class="cell-sub">bán kính m</span>
+        </div>
+      </div>
     </form>
     <div class="modal-foot">
       <button class="btn btn-ghost" onclick="closeModal()">Hủy</button>
       <button class="btn btn-primary" onclick="saveStudioInfo()">${icon('check')} Lưu</button>
     </div>`);
+}
+
+async function fillStudioGeo() {
+  toast('Đang lấy vị trí GPS…');
+  const g = await getPunchGeo();
+  if (!g) { toast('Không lấy được vị trí — kiểm tra quyền vị trí của trình duyệt', 'error'); return; }
+  $('#frmStudio [name=studioLat]').value = g.lat;
+  $('#frmStudio [name=studioLng]').value = g.lng;
+  toast('Đã lấy toạ độ ✓ — bấm Lưu để áp dụng');
 }
 
 function saveStudioInfo() {
@@ -2544,6 +2564,9 @@ function saveStudioInfo() {
   state.settings.address = fd.get('address').trim();
   state.settings.workStart = fd.get('workStart') || '09:00';
   state.settings.workEnd = fd.get('workEnd') || '18:00';
+  state.settings.studioLat = fd.get('studioLat').trim() || '';
+  state.settings.studioLng = fd.get('studioLng').trim() || '';
+  state.settings.studioRadius = +fd.get('studioRadius') || 200;
   document.title = state.settings.studioName + ' — CRM';
   logAction('update', 'settings', 'Thông tin studio');
   save(); closeModal(); render(); toast('Đã lưu cài đặt');
@@ -3841,21 +3864,69 @@ function renderTopbarAttendance() {
   else box.innerHTML = `<button class="punch-btn done" title="${fmtDate(rec.date)}: ${rec.in} – ${rec.out}">${icon('check')} ${rec.in}–${rec.out} (${workedHours(rec)}h)</button>`;
 }
 
-function selfPunch() {
+/* ---- GPS khi chấm công ---- */
+function getPunchGeo() {
+  return new Promise(res => {
+    if (!navigator.geolocation) return res(null);
+    navigator.geolocation.getCurrentPosition(
+      p => res({ lat: +p.coords.latitude.toFixed(6), lng: +p.coords.longitude.toFixed(6), acc: Math.round(p.coords.accuracy || 0) }),
+      () => res(null),
+      { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 }
+    );
+  });
+}
+
+function geoDistKm(a, b) {
+  if (!a || !b) return null;
+  const R = 6371, dLat = (b.lat - a.lat) * Math.PI / 180, dLng = (b.lng - a.lng) * Math.PI / 180;
+  const s = Math.pow(Math.sin(dLat / 2), 2) + Math.cos(a.lat * Math.PI / 180) * Math.cos(b.lat * Math.PI / 180) * Math.pow(Math.sin(dLng / 2), 2);
+  return R * 2 * Math.atan2(Math.sqrt(s), Math.sqrt(1 - s));
+}
+
+function studioGeo() {
+  const st = state.settings;
+  return (+st.studioLat && +st.studioLng) ? { lat: +st.studioLat, lng: +st.studioLng, radius: +st.studioRadius || 200 } : null;
+}
+
+function fmtDist(m) { return m >= 1000 ? (m / 1000).toFixed(1).replace('.', ',') + ' km' : Math.round(m) + ' m'; }
+
+function geoCellHtml(geo) {
+  if (!geo) return '<span class="cell-sub">—</span>';
+  const sg = studioGeo();
+  let extra = '';
+  if (sg) {
+    const d = geoDistKm(geo, sg);
+    if (d !== null) {
+      const m = d * 1000;
+      extra = m <= sg.radius
+        ? `<div class="cell-sub" style="color:var(--green)">✓ ${fmtDist(m)} — trong phạm vi</div>`
+        : `<div class="cell-sub" style="color:var(--red)">⚠ ${fmtDist(m)} — xa studio</div>`;
+    }
+  }
+  return `<a class="link" href="https://maps.google.com/?q=${geo.lat},${geo.lng}" target="_blank" rel="noopener">${icon('pin')} ${geo.lat}, ${geo.lng}</a>${extra}`;
+}
+
+async function selfPunch() {
   const u = currentUser();
   if (!u) return;
   if (!u.staffId) { toast('Tài khoản của bạn chưa liên kết nhân sự — quản trị viên sửa trong Tài khoản & Quyền', 'error'); return; }
+  toast('Đang lấy vị trí GPS…');
+  const geo = await getPunchGeo();
   const now = new Date();
   const time = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+  const where = geo
+    ? (studioGeo() ? (() => { const d = (geoDistKm(geo, studioGeo()) || 0) * 1000; return ' · 📍 ' + fmtDist(d) + ' từ studio'; })() : ' · 📍 đã ghi vị trí')
+    : ' · (không lấy được GPS)';
   const rec = attOf(u.staffId, todayStr());
   if (!rec) {
-    state.attendance.push({ id: uid(), staffId: u.staffId, date: todayStr(), in: time, out: '', note: 'Tự điểm danh', createdAt: todayStr() });
-    logAction('create', 'attendance', staffName(u.staffId) + ' điểm danh vào ' + time);
-    toast('Đã điểm danh vào lúc ' + time + ' 👋');
+    state.attendance.push({ id: uid(), staffId: u.staffId, date: todayStr(), in: time, out: '', note: 'Tự điểm danh' + (geo ? '' : ' (không có GPS)'), inGeo: geo || undefined, createdAt: todayStr() });
+    logAction('create', 'attendance', staffName(u.staffId) + ' điểm danh vào ' + time + (geo ? ' (có GPS)' : ' (không GPS)'));
+    toast('Đã điểm danh vào lúc ' + time + ' 👋' + where);
   } else if (!rec.out) {
     rec.out = time;
+    rec.outGeo = geo || undefined;
     logAction('update', 'attendance', staffName(u.staffId) + ' điểm danh ra ' + time + ' (' + workedHours(rec) + ' giờ)');
-    toast('Đã điểm danh ra lúc ' + time + ' — làm việc ' + workedHours(rec) + ' giờ hôm nay');
+    toast('Đã điểm danh ra lúc ' + time + ' — làm việc ' + workedHours(rec) + ' giờ hôm nay' + where);
   } else { toast('Hôm nay bạn đã chấm công đủ rồi ✓', 'error'); return; }
   save(); renderTopbarAttendance(); render();
 }
@@ -3887,7 +3958,7 @@ function attendanceDayTab() {
   </div>
   <div class="card list-wrap"><div class="table-wrap">
   <table>
-    <thead><tr><th>Nhân sự</th><th>Vào</th><th>Ra</th><th class="ta-r">Giờ làm</th><th>Trạng thái</th><th>Ghi chú</th><th class="ta-c">Thao tác</th></tr></thead>
+    <thead><tr><th>Nhân sự</th><th>Vào</th><th>Ra</th><th class="ta-r">Giờ làm</th><th>Trạng thái</th><th>Vị trí chấm công</th><th>Ghi chú</th><th class="ta-c">Thao tác</th></tr></thead>
     <tbody>
     ${list.map(s => {
       const r = attOf(s.id, date);
@@ -3898,6 +3969,7 @@ function attendanceDayTab() {
         <td class="${r && r.out && toMin(r.out) < toMin(state.settings.workEnd) ? 'loan-late' : 'money-muted'}">${r && r.out ? r.out : '—'}</td>
         <td class="money ta-r">${r && r.out ? workedHours(r) + 'h' : '—'}</td>
         <td><span class="badge ${st.cls}">${st.label}</span></td>
+        <td style="max-width:190px;font-size:11.5px">${r ? geoCellHtml(r.inGeo) : '<span class="cell-sub">—</span>'}</td>
         <td class="money-muted" style="max-width:180px">${r && r.note ? esc(r.note) : '—'}</td>
         <td class="cell-actions ta-c"><button class="icon-btn" title="${r ? 'Sửa' : 'Chấm bổ sung'}" onclick="openAttendanceModal('${s.id}','${date}')">${icon(r ? 'edit' : 'plus')}</button></td>
       </tr>`;
