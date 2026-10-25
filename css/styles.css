@@ -798,3 +798,14 @@ tbody tr.row-overdue:hover { background: #ffe4e4; }
 }
 .att-add:hover { border-color: var(--primary); color: var(--primary); }
 .att-add .icon { width: 16px; height: 16px; }
+
+/* ---- Nhật ký cập nhật (changelog) ---- */
+.cl-card { border-left: 3px solid var(--border); }
+.cl-card.cl-latest { border-left-color: #D97706; }
+.cl-ver {
+  font-size: 15px; font-weight: 800; letter-spacing: -.01em;
+  background: #18181B; color: #FBBF24; border-radius: 9px; padding: 3px 10px;
+}
+.cl-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.cl-list li { display: flex; align-items: flex-start; gap: 9px; font-size: 13px; line-height: 1.55; color: var(--text-1); }
+.cl-list .badge { font-size: 10.5px; margin-top: 2px; }

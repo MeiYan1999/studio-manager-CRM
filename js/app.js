@@ -75,6 +75,34 @@ const SHIFTS = {
 };
 const shiftOf = s => SHIFTS[(s && s.shift) || 'normal'] || SHIFTS.normal;
 
+// ---- Nhật ký cập nhật (changelog) ----
+const APP_VERSION = '3.1';
+const CL_KIND = { new: ['✨ mới', 'b-delivered'], fix: ['🐛 sửa lỗi', 'b-unpaid'], ui: ['🎨 giao diện', 'b-deposit'], imp: ['⚡ nâng cấp', 'b-confirmed'] };
+const CHANGELOG = [
+  { v: '3.1', d: '26/10/2026', items: [['new', 'Mục "Nhật ký cập nhật" trong Hệ thống — xem app đã thay đổi gì theo từng phiên bản']] },
+  { v: '3.0', d: '26/10/2026', items: [['new', 'Đính kèm ảnh (biên lai, hóa đơn, chứng từ) cho Thu chi, Chi phí và Đơn hàng — tự nén nhẹ, xem phóng to, tối đa 4 ảnh']] },
+  { v: '2.9', d: '26/10/2026', items: [['new', 'Trang "Chia ca làm việc" riêng — bảng tuần kiểu Excel (nhân sự × 7 ngày), điền ca mặc định cả tuần, ghi chú nhanh từng ô'], ['fix', 'Lỗi múi giờ làm lệch ngày đầu tuần trong lịch chia ca']] },
+  { v: '2.8', d: '25/10/2026', items: [['new', 'Chia ca: Ca 1 (7:30–17:30), Ca thường (8:30–18:30), Ca 2 (9:00–19:00) — tính muộn/về sớm theo ca từng người'], ['new', 'Nút Vào ca / Thoát ca thay cho điểm danh'], ['new', 'Bảng Hoạt động: biết ai đang online, ai offline theo thời gian thực']] },
+  { v: '2.7', d: '25/10/2026', items: [['new', 'Chấm công định vị GPS — ghi vị trí vào/ra ca, so khoảng cách tới chi nhánh gần nhất, cảnh báo xa studio']] },
+  { v: '2.6', d: '25/10/2026', items: [['new', 'Quản lý Thu chi (sổ quỹ): giao dịch thu/chi theo danh mục, hình thức, tồn quỹ tích lũy, lọc tháng']] },
+  { v: '2.5', d: '25/10/2026', items: [['new', 'Vai trò nhân sự mới: Thợ Chụp, Sale Onl, Stylist, Sale Off'], ['new', 'Lọc theo từng tháng trong năm cho Đơn hàng & Khách hàng kèm badge tổng kết'], ['ui', 'Dashboard làm mới phong cách black & gold sang trọng']] },
+  { v: '2.4', d: '25/10/2026', items: [['imp', 'Đồng bộ đa máy thật sự: phiên đăng nhập lưu database (không mất khi server restart), tự kéo dữ liệu mới mỗi 15 giây'], ['fix', 'Máy mới không còn bị bắt "tạo tài khoản lần đầu"; tự kết nối lại khi server Render thức dậy'], ['fix', 'Lỗi server không đọc JSON body khiến mọi lưu online thất bại âm thầm']] },
+  { v: '2.3', d: '24/10/2026', items: [['new', 'Lọc Ảnh kiểu Snappic: dán mã mọi định dạng (Excel/Zalo/có-không đuôi file), 4 nút copy 1 chạm, lọc RAW/JPG, tự tạo thư mục con']] },
+  { v: '2.2', d: '24/10/2026', items: [['new', 'Cổng khách hàng online thật: khách mở link từ điện thoại, nhập PIN, thả tim chọn ảnh, ghi chú yêu cầu sửa'], ['new', 'Hướng dẫn deploy lên Vercel/Render/Neon (DEPLOY.md) + chuyển dữ liệu máy lên server']] },
+  { v: '2.1', d: '24/10/2026', items: [['new', '"Album Khách Chọn" và "Lọc Ảnh" thành 2 mục riêng trong menu Quản lý']] },
+  { v: '2.0', d: '24/10/2026', items: [['new', 'Tạo Album kiểu Snappic: quét thư mục ảnh gốc, số ảnh gói & giá phụ thu, watermark, PIN, lời chào khách'], ['new', 'Thanh toán QR VietQR: khách báo "đã chuyển khoản", admin duyệt']] },
+  { v: '1.9', d: '10/2026', items: [['new', 'Đa chi nhánh: quản lý chi nhánh 1/2/3…, lọc toàn hệ thống theo chi nhánh, nhân sự chỉ thấy dữ liệu chi nhánh mình']] },
+  { v: '1.8', d: '10/2026', items: [['new', 'Cấu hình thông báo từng loại + hộp thư thông báo ngay trong app']] },
+  { v: '1.7', d: '10/2026', items: [['new', 'Trang Cài đặt mới: phòng ban, mục tiêu doanh số từng nhân sự, backup tự động hàng ngày, nhập khách từ Excel, AI key, SePay']] },
+  { v: '1.6', d: '10/2026', items: [['new', 'Chấm công nhân viên: điểm danh vào/ra, giờ làm, đi muộn'], ['new', 'Lương theo giờ × giờ chấm công; xuất bảng chấm công Excel/PDF']] },
+  { v: '1.5', d: '10/2026', items: [['new', 'Tài chính: báo cáo doanh thu, chi phí, tính lương + hoa hồng tự động'], ['new', 'Hợp đồng thông minh: lịch thanh toán tự sinh, điều khoản mẫu, cảnh báo, in'], ['new', 'Cổng khách hàng xem tiến độ & chọn ảnh online']] },
+  { v: '1.4', d: '10/2026', items: [['new', 'Đăng nhập/đăng ký, tài khoản từng nhân viên, phân quyền từng phân hệ'], ['new', 'Buộc đổi mật khẩu lần đầu đăng nhập, nhật ký thao tác (ai làm gì, lúc nào)'], ['ui', 'Đổi thương hiệu Memento CRM → Studio Manager']] },
+  { v: '1.3', d: '10/2026', items: [['new', 'Bảng công việc Kanban kéo-thả kiểu Trello'], ['new', 'Trang phục, Concept và Mượn đồ tự trừ tồn kho']] },
+  { v: '1.2', d: '10/2026', items: [['imp', 'Backend Node.js + PostgreSQL tùy chọn để nhiều máy dùng chung dữ liệu']] },
+  { v: '1.1', d: '10/2026', items: [['fix', 'Sửa lỗi đăng ký trùng tên đăng nhập, lỗi mã đơn hàng, giữ phiên làm việc ổn định hơn']] },
+  { v: '1.0', d: '10/2026', items: [['new', 'Phiên bản đầu tiên: Khách hàng, Lịch chụp (lịch/tháng), Đơn hàng & thanh toán, Gói dịch vụ, Nhân sự, Tổng quan']] },
+];
+
 // Ca hiệu lực của nhân sự vào 1 ngày: ca chia riêng trong lịch > ca mặc định của người đó
 function effShift(s, date) {
   const plan = (state.shiftPlan || {})[date] || {};
@@ -96,6 +124,7 @@ const TITLES = {
   accounts:  ['Tài khoản & Quyền', 'Tạo tài khoản đăng nhập và phân quyền cho nhân viên'],
   notifications: ['Cấu hình thông báo', 'Nhận thông báo khi có hoạt động mới'],
   logs:      ['Nhật ký thao tác', 'Ai đã làm gì và lúc nào'],
+  changelog: ['Nhật ký cập nhật', 'App đã cập nhật & thay đổi những gì theo từng phiên bản'],
   customers: ['Khách hàng', 'Danh sách khách hàng & lịch sử'],
   packages:  ['Gói dịch vụ', 'Bảng giá các gói chụp của studio'],
   staff:     ['Nhân sự', 'Ekip nhiếp ảnh gia và hậu kỳ'],
@@ -351,7 +380,7 @@ function migrateLegacy(parsed) {
   });
   (state.users || []).forEach(u => {
     if (Array.isArray(u.perms) && u.perms.includes('accounts')) {
-      ['logs', 'finance', 'contracts', 'attendance', 'notifications', 'albums', 'photofilter', 'shiftplan'].forEach(pm => {
+      ['logs', 'finance', 'contracts', 'attendance', 'notifications', 'albums', 'photofilter', 'shiftplan', 'changelog'].forEach(pm => {
         if (!u.perms.includes(pm)) { u.perms.push(pm); changed = true; }
       });
     }
@@ -564,6 +593,7 @@ const VIEWS = {
   accounts: { html: accountsView },
   notifications: { html: notificationsView },
   logs: { html: logsView },
+  changelog: { html: changelogView },
   customers: { html: customersView },
   packages: { html: packagesView },
   staff: { html: staffView },
@@ -3010,6 +3040,7 @@ const PERM_MODULES = [
   ['accounts', 'Tài khoản & Quyền'],
   ['notifications', 'Thông báo'],
   ['logs', 'Nhật ký thao tác'],
+  ['changelog', 'Nhật ký cập nhật'],
   ['settings', 'Cài đặt'],
 ];
 const ALL_PERMS = PERM_MODULES.map(m => m[0]);
@@ -3043,6 +3074,7 @@ const NAV = [
     ['accounts', 'Tài khoản & Quyền', 'lock'],
     ['notifications', 'Thông báo', 'alert'],
     ['logs', 'Nhật ký thao tác', 'clock'],
+    ['changelog', 'Nhật ký cập nhật', 'arrow-up'],
     ['settings', 'Cài đặt', 'settings'],
   ]},
 ];
@@ -5600,6 +5632,29 @@ function fmtDateTime(iso) {
   if (!iso) return '—';
   const d = new Date(iso);
   return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function changelogView() {
+  return `
+  <div class="card" style="padding:20px 24px;margin-bottom:16px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;background:linear-gradient(135deg,#18181B,#27272A);border:1px solid #3F3F46;color:#FAFAFA">
+    <div style="width:46px;height:46px;border-radius:14px;background:linear-gradient(180deg,#FBBF24,#D97706);display:flex;align-items:center;justify-content:center;color:#18181B">${icon('camera')}</div>
+    <div style="flex:1;min-width:200px">
+      <div style="font-size:10.5px;font-weight:700;letter-spacing:.12em;color:#F59E0B;text-transform:uppercase">Studio Manager</div>
+      <div style="font-size:19px;font-weight:800">Phiên bản ${APP_VERSION} — ${CHANGELOG[0].d}</div>
+    </div>
+    <span class="cell-sub" style="color:#A1A1AA">${CHANGELOG.reduce((n, r) => n + r.items.length, 0)} thay đổi · ${CHANGELOG.length} phiên bản</span>
+  </div>
+  ${CHANGELOG.map((r, i) => `
+  <div class="card cl-card ${i === 0 ? 'cl-latest' : ''}" style="padding:16px 20px;margin-bottom:12px">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+      <span class="cl-ver">${r.v}</span>
+      ${i === 0 ? '<span class="badge b-delivered">phiên bản hiện tại</span>' : ''}
+      <span class="cell-sub" style="margin-left:auto">${r.d}</span>
+    </div>
+    <ul class="cl-list">
+      ${r.items.map(([kind, txt]) => `<li><span class="badge ${CL_KIND[kind] ? CL_KIND[kind][1] : 'b-khac'}" style="flex:none">${CL_KIND[kind] ? CL_KIND[kind][0] : kind}</span><span>${esc(txt)}</span></li>`).join('')}
+    </ul>
+  </div>`).join('')}`;
 }
 
 function logsView() {
