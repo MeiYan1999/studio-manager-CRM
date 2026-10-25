@@ -75,6 +75,12 @@ const SHIFTS = {
 };
 const shiftOf = s => SHIFTS[(s && s.shift) || 'normal'] || SHIFTS.normal;
 
+// Ca hiệu lực của nhân sự vào 1 ngày: ca chia riêng trong lịch > ca mặc định của người đó
+function effShift(s, date) {
+  const plan = (state.shiftPlan || {})[date] || {};
+  return SHIFTS[plan[s.id]] || shiftOf(s);
+}
+
 const TITLES = {
   dashboard: ['Tổng quan', 'Bức tranh kinh doanh của studio'],
   bookings:  ['Lịch chụp', 'Quản lý lịch hẹn và tiến trình chụp'],
@@ -83,6 +89,7 @@ const TITLES = {
   contracts: ['Hợp đồng', 'Hợp đồng thông minh — lịch thanh toán & điều khoản tự sinh'],
   tasks:     ['Bảng công việc', 'Kanban — kéo thả thẻ để cập nhật tiến độ'],
   attendance:['Chấm công', 'Điểm danh, giờ làm và thống kê chấm công nhân sự'],
+  shiftplan: ['Chia ca làm việc', 'Xếp ca theo ngày cho toàn bộ nhân viên — kiểu bảng Excel'],
   albums:   ['Album Khách Chọn', 'Tạo link album để khách thả tim chọn ảnh online'],
   photofilter: ['Lọc Ảnh', 'Lọc file ảnh gốc theo mã khách chọn sang thư mục riêng'],
   wardrobe:  ['Trang phục & Concept', 'Kho trang phục, concept chụp và phiếu mượn đồ'],
@@ -122,7 +129,7 @@ function blankState() {
     outfits: [], concepts: [], loans: [],
     users: [],
     logs: [],
-    expenses: [], payrolls: [], contracts: [], cash: [],
+    expenses: [], payrolls: [], contracts: [], cash: [], shiftPlan: {},
     attendance: [],
     departments: [], roleGroups: [],
     notifications: [],
@@ -313,6 +320,8 @@ function migrateLegacy(parsed) {
   if (!Array.isArray(p.logs)) { state.logs = []; changed = true; }
   if (!Array.isArray(p.expenses)) { state.expenses = seedExpenses(); changed = true; }
   if (!Array.isArray(p.cash)) { state.cash = seedCash(); changed = true; }
+  if (!p.shiftPlan) { state.shiftPlan = {}; changed = true; }
+  (state.users || []).forEach(u => { if (Array.isArray(u.perms) && u.perms.includes('shifts') && !u.perms.includes('shiftplan')) { u.perms.push('shiftplan'); changed = true; } });
   if (!Array.isArray(p.contracts)) { state.contracts = seedContracts(); state.contractSeq = 1003; changed = true; }
   else if (!p.contractSeq) state.contractSeq = 1003;
   if (!Array.isArray(p.payrolls)) { state.payrolls = []; changed = true; }
@@ -341,7 +350,7 @@ function migrateLegacy(parsed) {
   });
   (state.users || []).forEach(u => {
     if (Array.isArray(u.perms) && u.perms.includes('accounts')) {
-      ['logs', 'finance', 'contracts', 'attendance', 'notifications', 'albums', 'photofilter'].forEach(pm => {
+      ['logs', 'finance', 'contracts', 'attendance', 'notifications', 'albums', 'photofilter', 'shiftplan'].forEach(pm => {
         if (!u.perms.includes(pm)) { u.perms.push(pm); changed = true; }
       });
     }
@@ -547,6 +556,7 @@ const VIEWS = {
   contracts: { html: contractsView },
   tasks: { html: tasksView },
   attendance: { html: attendanceView },
+  shiftplan: { html: shiftplanView },
   albums: { html: albumsView },
   photofilter: { html: photofilterView },
   wardrobe: { html: wardrobeView },
@@ -2984,6 +2994,7 @@ const PERM_MODULES = [
   ['contracts', 'Hợp đồng'],
   ['tasks', 'Bảng công việc'],
   ['attendance', 'Chấm công'],
+  ['shiftplan', 'Chia ca làm việc'],
   ['albums', 'Album Khách Chọn'],
   ['photofilter', 'Lọc Ảnh'],
   ['wardrobe', 'Trang phục & Mượn đồ'],
@@ -3012,6 +3023,7 @@ const NAV = [
     ['contracts', 'Hợp đồng', 'receipt'],
     ['tasks', 'Bảng công việc', 'board'],
     ['attendance', 'Chấm công', 'clock'],
+    ['shiftplan', 'Chia ca làm việc', 'calendar'],
     ['albums', 'Album Khách Chọn', 'camera'],
     ['photofilter', 'Lọc Ảnh', 'package'],
     ['wardrobe', 'Trang phục & Concept', 'shirt'],
@@ -4032,6 +4044,99 @@ async function selfPunch() {
 }
 
 /* ---- Phân hệ quản lý chấm công ---- */
+/* ---- Chia ca làm việc theo tuần (kiểu bảng Excel) ---- */
+function spWeekStart(dateStr) {
+  const d = new Date(dateStr + 'T00:00:00');
+  const dow = (d.getDay() + 6) % 7; // Thứ 2 = 0
+  d.setDate(d.getDate() - dow);
+  return d.toISOString().slice(0, 10);
+}
+function spAddDays(dateStr, n) {
+  const d = new Date(dateStr + 'T00:00:00');
+  d.setDate(d.getDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+function shiftplanView() {
+  const vs = viewState.shiftplan = viewState.shiftplan || { week: spWeekStart(todayStr()) };
+  const list = state.staff.filter(s => s.active && branchMatch(s));
+  const days = Array.from({ length: 7 }, (_, i) => spAddDays(vs.week, i));
+  const cellCls = k => k === 'ca1' ? 'sp-ca1' : k === 'ca2' ? 'sp-ca2' : k === 'off' ? 'sp-off' : 'sp-normal';
+  const cellVal = (date, s) => ((state.shiftPlan || {})[date] || {})[s.id] || '';
+  const countFor = (date, key) => list.filter(s => {
+    const v = cellVal(date, s);
+    if (key === 'work') return v !== 'off'; // ô trống = làm ca mặc định → vẫn tính
+    return v === key;
+  }).length;
+  const wkBtn = (lbl, n) => `<button class="btn btn-ghost btn-sm" onclick="viewState.shiftplan.week=spAddDays(viewState.shiftplan.week,${n * 7});render()">${lbl}</button>`;
+  return `
+  <div class="toolbar">
+    <span style="font-size:13px;color:var(--text-2)">${list.length} nhân sự · tuần ${fmtDate(vs.week)} → ${fmtDate(days[6])}</span>
+    ${wkBtn('‹ Tuần trước', -1)}
+    <button class="btn btn-ghost btn-sm" onclick="viewState.shiftplan.week=spWeekStart(todayStr());render()">Tuần này</button>
+    ${wkBtn('Tuần sau ›', 1)}
+    <div class="spacer"></div>
+    <button class="btn btn-ghost btn-sm" title="Điền ca mặc định của từng người vào các ô trống cả tuần" onclick="spFillDefaults('${vs.week}')">${icon('refresh')} Điền ca mặc định cả tuần</button>
+    <button class="btn btn-ghost btn-sm" title="Xóa hết phân ca của tuần này (về ca mặc định)" onclick="spClearWeek('${vs.week}')">${icon('trash')} Xóa lịch tuần</button>
+  </div>
+  <div class="card list-wrap"><div class="table-wrap" style="overflow-x:auto">
+  <table class="sp-table">
+    <thead><tr>
+      <th style="min-width:150px">Tên</th><th style="min-width:110px">Vị trí</th>
+      ${days.map(d => `<th class="ta-c ${d === todayStr() ? 'sp-today' : ''}">${d.slice(8)}/${d.slice(5, 7)}<div class="cell-sub">${WD_SHORT[new Date(d + 'T00:00:00').getDay()]}</div></th>`).join('')}
+    </tr></thead>
+    <tbody>
+    ${list.map(s => `<tr>
+      <td><div class="cell-main">${esc(s.name)}</div></td>
+      <td><span class="badge b-role-${s.role}">${ROLES[s.role]}</span></td>
+      ${days.map(d => `<td class="ta-c sp-cell ${d === todayStr() ? 'sp-today' : ''}">
+        <select class="select sp-sel ${cellCls(cellVal(d, s))}" onchange="spSet('${d}','${s.id}',this.value)" title="${esc(s.name)} · ${fmtDate(d)}">
+          ${['', 'ca1', 'normal', 'ca2', 'off'].map(k => {
+            const sh = k ? SHIFTS[k] : null;
+            const def = !k ? shiftOf(s) : null;
+            return `<option value="${k}" ${cellVal(d, s) === k ? 'selected' : ''}>${k === '' ? '· ' + def.short + ' (mặc định)' : k === 'off' ? 'Nghỉ' : sh.label}</option>`;
+          }).join('')}
+        </select></td>`).join('')}
+    </tr>`).join('') || emptyRow(9, 'Chưa có nhân sự đang hoạt động')}
+    </tbody>
+    <tfoot><tr>
+      <td colspan="2" class="ta-r money-muted">Số người làm:</td>
+      ${days.map(d => `<td class="ta-c"><b>${countFor(d, 'work')}</b> người<div class="cell-sub">C1 ${countFor(d, 'ca1')} · C2 ${countFor(d, 'ca2')}</div></td>`).join('')}
+    </tr></tfoot>
+  </table></div></div>
+  <p style="font-size:12px;color:var(--text-3);margin-top:10px">Chọn ca cho từng người từng ngày. Ô <b>· Ca (mặc định)</b> nghĩa là dùng ca gán trong hồ sơ nhân sự. Chấm công và tính muộn/về sớm tự theo ca đã chia của ngày đó.</p>`;
+}
+
+function spSet(date, staffId, val) {
+  state.shiftPlan = state.shiftPlan || {};
+  if (!state.shiftPlan[date]) state.shiftPlan[date] = {};
+  if (val) state.shiftPlan[date][staffId] = val; else delete state.shiftPlan[date][staffId];
+  const s = byId(state.staff, staffId);
+  const lbl = val ? SHIFTS[val].short : 'mặc định';
+  logAction('update', 'shift', (s ? s.name : staffId) + ' · ' + fmtDate(date) + ' → ' + lbl);
+  save();
+  // vẽ lại màu ô mà không render cả trang (giữ focus)
+  render();
+}
+
+function spFillDefaults(week) {
+  if (!confirm('Điền ca mặc định của từng nhân sự vào tất cả ô trống của tuần này?')) return;
+  for (let i = 0; i < 7; i++) {
+    const d = spAddDays(week, i);
+    state.shiftPlan[d] = state.shiftPlan[d] || {};
+    state.staff.filter(s => s.active).forEach(s => { if (!state.shiftPlan[d][s.id]) state.shiftPlan[d][s.id] = s.shift || 'normal'; });
+  }
+  logAction('data', 'shift', 'Điền ca mặc định cho tuần từ ' + fmtDate(week));
+  save(); render(); toast('Đã điền ca mặc định cả tuần');
+}
+
+function spClearWeek(week) {
+  if (!confirm('Xóa hết phân ca riêng của tuần này? (nhân sự quay về ca mặc định)')) return;
+  for (let i = 0; i < 7; i++) delete state.shiftPlan[spAddDays(week, i)];
+  logAction('delete', 'shift', 'Xóa lịch ca tuần từ ' + fmtDate(week));
+  save(); render(); toast('Đã xóa lịch tuần');
+}
+
 function attendanceView() {
   const v = viewState.attendance;
   const tab = (t, label) => `<button class="${v.tab === t ? 'active' : ''}" onclick="viewState.attendance.tab='${t}';render()">${label}</button>`;
@@ -4055,7 +4160,7 @@ function attendanceDayTab() {
   return `
   <div class="stat-grid" style="grid-template-columns:repeat(3,1fr)">
     ${statCard('clock', 'tint-blue', done + '/' + list.length, 'Nhân sự đã vào ca', `<span class="stat-sub muted">${weekday(date)}, ${fmtDate(date)} · giờ chuẩn theo ca từng người</span>`)}
-    ${statCard('alert', 'tint-amber', list.filter(s => { const r = attOf(s.id, date); return r && toMin(r.in) > toMin(shiftOf(s).start); }).length, 'Đi muộn (theo ca)', '')}
+    ${statCard('alert', 'tint-amber', list.filter(s => { const r = attOf(s.id, date); return r && toMin(r.in) > toMin(effShift(s, date).start); }).length, 'Đi muộn (theo ca)', '')}
     ${statCard('user', 'tint-cyan', list.length - done, 'Chưa điểm danh', '')}
   </div>
   <div class="card list-wrap"><div class="table-wrap">
@@ -4064,8 +4169,8 @@ function attendanceDayTab() {
     <tbody>
     ${list.map(s => {
       const r = attOf(s.id, date);
-      const st = attStatus(r, shiftOf(s));
-      const sh = shiftOf(s);
+      const sh = effShift(s, date);
+      const st = attStatus(r, sh);
       return `<tr>
         <td><div class="cell-main">${esc(s.name)}</div><div class="cell-sub">${ROLES[s.role] || ''} · ${sh.short} (${sh.start}–${sh.end})</div></td>
         <td class="${r && toMin(r.in) > toMin(sh.start) ? 'loan-late' : 'money-muted'}">${r ? r.in : '—'}</td>
@@ -4087,7 +4192,7 @@ function attendanceMonthTab() {
   const rows = list.map(s => {
     const recs = state.attendance.filter(a => a.staffId === s.id && (a.date || '').startsWith(month));
     const hours = recs.reduce((t, r) => t + workedHours(r), 0);
-    const lates = recs.filter(r => toMin(r.in) > toMin(shiftOf(s).start)).length;
+    const lates = recs.filter(r => toMin(r.in) > toMin(effShift(s, r.date).start)).length;
     const noOut = recs.filter(r => !r.out).length;
     return { s, days: recs.length, hours, lates, noOut };
   });
@@ -4166,7 +4271,7 @@ function attMonthData() {
       const h = recs.reduce((t, r) => t + workedHours(r), 0);
       return { name: s.name, days: recs.length, hours: Math.round(h * 10) / 10,
         avg: recs.length ? Math.round(h / recs.length * 10) / 10 : 0,
-        lates: recs.filter(r => toMin(r.in) > toMin(shiftOf(s).start)).length };
+        lates: recs.filter(r => toMin(r.in) > toMin(effShift(s, r.date).start)).length };
     }),
     detail: state.staff.filter(s => s.active).flatMap(s =>
       state.attendance.filter(a => a.staffId === s.id && (a.date || '').startsWith(month))
