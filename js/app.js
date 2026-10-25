@@ -76,9 +76,10 @@ const SHIFTS = {
 const shiftOf = s => SHIFTS[(s && s.shift) || 'normal'] || SHIFTS.normal;
 
 // ---- Nhật ký cập nhật (changelog) ----
-const APP_VERSION = '3.3';
+const APP_VERSION = '3.4';
 const CL_KIND = { new: ['✨ mới', 'b-delivered'], fix: ['🐛 sửa lỗi', 'b-unpaid'], ui: ['🎨 giao diện', 'b-deposit'], imp: ['⚡ nâng cấp', 'b-confirmed'] };
 const CHANGELOG = [
+  { v: '3.4', d: '26/10/2026', items: [['ui', 'Tinh chỉnh toàn diện theo taste-skill: bảng màu stone ấm + than + 1 accent vàng (bỏ tím mặc định), nút lún nhẹ khi bấm, đổi trang có chuyển động cascade, header bảng chữ in hoa giãn dòng, focus ring rõ, modal mờ nền pop spring']] },
   { v: '3.3', d: '26/10/2026', items: [['new', 'Cổng thanh toán SePay: webhook biến động số dư — giao dịch về hiện ngay trong Thu chi, tự đối soát đơn (khớp mã ĐH/số tiền), toast + thông báo tiền về'], ['new', 'Nhắn Tin kiểu Pancake: phân loại hội thoại (Chờ trả lời/Đã trả lời/Xong), gắn thẻ khách (Khách mới, Đã báo giá, Chờ cọc…), quản lý mẫu tin nhắn riêng']] },
   { v: '3.2', d: '26/10/2026', items: [['new', 'Mục Nhắn Tin: hội thoại Zalo / Facebook Fanpage — danh sách trò chuyện, bong bóng chat, mẫu trả lời nhanh, gửi link chọn ảnh cho khách, kết nối kênh (chờ token OA/Fanpage)']] },
   { v: '3.1', d: '26/10/2026', items: [['new', 'Mục "Nhật ký cập nhật" trong Hệ thống — xem app đã thay đổi gì theo từng phiên bản']] },
