@@ -809,3 +809,23 @@ tbody tr.row-overdue:hover { background: #ffe4e4; }
 .cl-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .cl-list li { display: flex; align-items: flex-start; gap: 9px; font-size: 13px; line-height: 1.55; color: var(--text-1); }
 .cl-list .badge { font-size: 10.5px; margin-top: 2px; }
+
+/* ---- Nhắn Tin (Zalo / Facebook) ---- */
+.msg-layout { display: grid; grid-template-columns: 320px 1fr; gap: 14px; align-items: start; }
+.msg-list { padding: 0 !important; overflow: hidden; }
+.msg-row { display: flex; gap: 10px; padding: 11px 12px; cursor: pointer; border-bottom: 1px solid var(--border-soft); align-items: center; }
+.msg-row:hover { background: #f8fafc; }
+.msg-row.cur { background: #eef2ff; }
+.msg-row .avatar { width: 38px; height: 38px; font-size: 12px; font-weight: 800; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+.msg-dot { flex: none; background: #ef4444; color: #fff; font-size: 10px; font-weight: 800; border-radius: 999px; padding: 1px 6px; }
+.msg-pane { padding: 0 !important; display: flex; flex-direction: column; min-height: 560px; }
+.msg-head { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-bottom: 1px solid var(--border-soft); }
+.msg-head .avatar { width: 38px; height: 38px; font-size: 12px; font-weight: 800; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+.msg-stream { flex: 1; overflow-y: auto; padding: 16px 14px; display: flex; flex-direction: column; gap: 10px; background: #f8fafc; max-height: 480px; }
+.msg-b { max-width: 72%; display: flex; flex-direction: column; align-self: flex-start; }
+.msg-b.me { align-self: flex-end; align-items: flex-end; }
+.msg-b .bubble { padding: 9px 13px; border-radius: 14px 14px 14px 4px; background: #fff; border: 1px solid var(--border); font-size: 13px; line-height: 1.55; white-space: pre-wrap; }
+.msg-b.me .bubble { background: linear-gradient(180deg, #6366F1, #4F46E5); border-color: #4F46E5; color: #fff; border-radius: 14px 14px 4px 14px; }
+.msg-tools { display: flex; gap: 8px; padding: 8px 12px 0; flex-wrap: wrap; border-top: 1px solid var(--border-soft); }
+.msg-input-row { display: flex; gap: 8px; padding: 10px 12px 12px; }
+@media (max-width: 900px) { .msg-layout { grid-template-columns: 1fr; } }

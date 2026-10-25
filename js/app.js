@@ -76,9 +76,10 @@ const SHIFTS = {
 const shiftOf = s => SHIFTS[(s && s.shift) || 'normal'] || SHIFTS.normal;
 
 // ---- Nhật ký cập nhật (changelog) ----
-const APP_VERSION = '3.1';
+const APP_VERSION = '3.2';
 const CL_KIND = { new: ['✨ mới', 'b-delivered'], fix: ['🐛 sửa lỗi', 'b-unpaid'], ui: ['🎨 giao diện', 'b-deposit'], imp: ['⚡ nâng cấp', 'b-confirmed'] };
 const CHANGELOG = [
+  { v: '3.2', d: '26/10/2026', items: [['new', 'Mục Nhắn Tin: hội thoại Zalo / Facebook Fanpage — danh sách trò chuyện, bong bóng chat, mẫu trả lời nhanh, gửi link chọn ảnh cho khách, kết nối kênh (chờ token OA/Fanpage)']] },
   { v: '3.1', d: '26/10/2026', items: [['new', 'Mục "Nhật ký cập nhật" trong Hệ thống — xem app đã thay đổi gì theo từng phiên bản']] },
   { v: '3.0', d: '26/10/2026', items: [['new', 'Đính kèm ảnh (biên lai, hóa đơn, chứng từ) cho Thu chi, Chi phí và Đơn hàng — tự nén nhẹ, xem phóng to, tối đa 4 ảnh']] },
   { v: '2.9', d: '26/10/2026', items: [['new', 'Trang "Chia ca làm việc" riêng — bảng tuần kiểu Excel (nhân sự × 7 ngày), điền ca mặc định cả tuần, ghi chú nhanh từng ô'], ['fix', 'Lỗi múi giờ làm lệch ngày đầu tuần trong lịch chia ca']] },
@@ -125,6 +126,7 @@ const TITLES = {
   notifications: ['Cấu hình thông báo', 'Nhận thông báo khi có hoạt động mới'],
   logs:      ['Nhật ký thao tác', 'Ai đã làm gì và lúc nào'],
   changelog: ['Nhật ký cập nhật', 'App đã cập nhật & thay đổi những gì theo từng phiên bản'],
+  chats:    ['Nhắn Tin', 'Hội thoại Zalo / Facebook Fanpage — trả lời khách ngay trong app'],
   customers: ['Khách hàng', 'Danh sách khách hàng & lịch sử'],
   packages:  ['Gói dịch vụ', 'Bảng giá các gói chụp của studio'],
   staff:     ['Nhân sự', 'Ekip nhiếp ảnh gia và hậu kỳ'],
@@ -158,7 +160,7 @@ function blankState() {
     outfits: [], concepts: [], loans: [],
     users: [],
     logs: [],
-    expenses: [], payrolls: [], contracts: [], cash: [], shiftPlan: {}, shiftNotes: {},
+    expenses: [], payrolls: [], contracts: [], cash: [], shiftPlan: {}, shiftNotes: {}, chats: [],
     attendance: [],
     departments: [], roleGroups: [],
     notifications: [],
@@ -351,6 +353,7 @@ function migrateLegacy(parsed) {
   if (!Array.isArray(p.cash)) { state.cash = seedCash(); changed = true; }
   if (!p.shiftPlan) { state.shiftPlan = {}; changed = true; }
   if (!p.shiftNotes) { state.shiftNotes = {}; changed = true; }
+  if (!Array.isArray(p.chats)) { state.chats = seedChats(); changed = true; }
   (state.users || []).forEach(u => { if (Array.isArray(u.perms) && u.perms.includes('shifts') && !u.perms.includes('shiftplan')) { u.perms.push('shiftplan'); changed = true; } });
   if (!Array.isArray(p.contracts)) { state.contracts = seedContracts(); state.contractSeq = 1003; changed = true; }
   else if (!p.contractSeq) state.contractSeq = 1003;
@@ -380,7 +383,7 @@ function migrateLegacy(parsed) {
   });
   (state.users || []).forEach(u => {
     if (Array.isArray(u.perms) && u.perms.includes('accounts')) {
-      ['logs', 'finance', 'contracts', 'attendance', 'notifications', 'albums', 'photofilter', 'shiftplan', 'changelog'].forEach(pm => {
+      ['logs', 'finance', 'contracts', 'attendance', 'notifications', 'albums', 'photofilter', 'shiftplan', 'changelog', 'chats'].forEach(pm => {
         if (!u.perms.includes(pm)) { u.perms.push(pm); changed = true; }
       });
     }
@@ -594,6 +597,7 @@ const VIEWS = {
   notifications: { html: notificationsView },
   logs: { html: logsView },
   changelog: { html: changelogView },
+  chats: { html: chatsView },
   customers: { html: customersView },
   packages: { html: packagesView },
   staff: { html: staffView },
@@ -3041,6 +3045,7 @@ const PERM_MODULES = [
   ['notifications', 'Thông báo'],
   ['logs', 'Nhật ký thao tác'],
   ['changelog', 'Nhật ký cập nhật'],
+  ['chats', 'Nhắn Tin'],
   ['settings', 'Cài đặt'],
 ];
 const ALL_PERMS = PERM_MODULES.map(m => m[0]);
@@ -3075,6 +3080,7 @@ const NAV = [
     ['notifications', 'Thông báo', 'alert'],
     ['logs', 'Nhật ký thao tác', 'clock'],
     ['changelog', 'Nhật ký cập nhật', 'arrow-up'],
+    ['chats', 'Nhắn Tin', 'mail'],
     ['settings', 'Cài đặt', 'settings'],
   ]},
 ];
@@ -4475,6 +4481,269 @@ const ATT_MAX = 4;
 let __attTemp = [];
 const attInit = photos => { __attTemp = (photos || []).slice(0, ATT_MAX); attPaint(); };
 
+/* ---- Nhắn Tin (Zalo / Facebook Fanpage) ---- */
+const CHAN = {
+  zalo: { label: 'Zalo', color: '#0068FF', bg: '#e7f0ff' },
+  fb: { label: 'Facebook', color: '#0866FF', bg: '#e7efff' },
+  web: { label: 'Web', color: '#059669', bg: '#e6f7f1' },
+};
+const MSG_TEMPLATES = [
+  'Xin chào {name}! Studio cảm ơn bạn đã quan tâm dịch vụ chụp 📸',
+  'Dạ báo giá gói {gói} hiện tại là …đ — đã bao gồm …Bạn cần em gửi chi tiết không ạ?',
+  'Bạn ơi đặt cọc giúp studio 30% để giữ lịch nhé — có QR chuyển khoản em gửi ngay.',
+  'Ảnh của bạn đã hậu kỳ xong, xem trước tại link album của studio nhé ❤',
+  'Cảm ơn bạn đã sử dụng dịch vụ! Nhớ đánh giá 5⭐ giúp studio nha 🥰',
+];
+let __openChat = null;
+
+function seedChats() {
+  const t = Date.now(), mm = n => new Date(t - n * 60000).toISOString();
+  return [
+    { id: uid(), channel: 'zalo', name: 'Nguyễn Ngọc Anh', phone: '0901 222 333', lastRead: mm(1),
+      msgs: [
+        { from: 'them', text: 'Chào studio, mình muốn hỏi gói chụp gia đình 4 người giá bao nhiêu ạ?', ts: mm(24) },
+        { from: 'me', text: 'Chào chị Anh 👋 Gói gia đình 4 người là 3.500.000đ — gồm 60 ảnh chỉnh sửa, 1 bộ áo và album 20×30. Chị đặt lịch tuần này studio ưu tiên tặng thêm 5 ảnh ạ!', ts: mm(21) },
+        { from: 'them', text: 'A ơi cho em hỏi giá gói chụp mẹ và bé với ạ, bé nhà em được 8 tháng', ts: mm(3) },
+      ] },
+    { id: uid(), channel: 'fb', name: 'Trần Minh Quân', phone: '0938 555 111', lastRead: mm(60),
+      msgs: [
+        { from: 'them', text: 'Fanpage ơi, tháng 11 còn lịch chụp couples không?', ts: mm(150) },
+        { from: 'me', text: 'Dạ còn anh nhé! Anh ghim lịch thứ 7 hoặc CN đều được ạ 📅', ts: mm(140) },
+        { from: 'them', text: 'OK để anh bàn với người yêu rồi chốt nhé', ts: mm(138) },
+      ] },
+    { id: uid(), channel: 'zalo', name: 'Lê Thị Hồng Vân', phone: '0977 888 999', lastRead: mm(200),
+      msgs: [
+        { from: 'them', text: 'Ảnh đã nhận rồi, đẹp lắm ạ, cảm ơn studio nhiều!', ts: mm(400) },
+        { from: 'me', text: 'Studio rất vui khi chị hài lòng ạ 🥰 Nhớ đánh giá 5⭐ giúp studio nhé chị!', ts: mm(395) },
+      ] },
+  ];
+}
+
+function chatUnread(c) {
+  return c.msgs.filter(m => m.from === 'them' && (!c.lastRead || m.ts > c.lastRead)).length;
+}
+
+function msgTime(ts) {
+  const d = new Date(ts), now = new Date();
+  const hm = pad(d.getHours()) + ':' + pad(d.getMinutes());
+  if (d.toDateString() === now.toDateString()) return hm;
+  return fmtDate(d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate())) + ' ' + hm;
+}
+
+function chatsView() {
+  const v = viewState.chats = viewState.chats || { q: '', chan: 'all' };
+  const list = state.chats
+    .filter(c => v.chan === 'all' || c.channel === v.chan)
+    .filter(c => !v.q || [c.name, c.phone].some(x => String(x || '').toLowerCase().includes(v.q.trim().toLowerCase())))
+    .sort((a, b) => (b.msgs[b.msgs.length - 1] || {}).ts.localeCompare((a.msgs[a.msgs.length - 1] || {}).ts));
+  const cur = __openChat && state.chats.find(c => c.id === __openChat);
+  const totalUnread = state.chats.reduce((s, c) => s + chatUnread(c), 0);
+  const chanBtn = k => `<button class="${v.chan === k ? 'active' : ''}" onclick="viewState.chats.chan='${k}';render()">${k === 'all' ? 'Tất cả' : CHAN[k].label}</button>`;
+  return `
+  <div class="toolbar">
+    <div class="pill-toggle">${chanBtn('all')}${chanBtn('zalo')}${chanBtn('fb')}${chanBtn('web')}</div>
+    <span class="badge b-unpaid">${totalUnread} tin chưa đọc</span>
+    <div class="spacer"></div>
+    <button class="btn btn-ghost" onclick="openChatConnModal()" title="Kết nối Fanpage / Zalo OA">${icon('card')} Kết nối kênh</button>
+    <button class="btn btn-primary" onclick="openChatModal()">${icon('plus')} Hội thoại mới</button>
+  </div>
+  <div class="msg-layout">
+    <div class="msg-list card">
+      <div style="padding:10px 12px;border-bottom:1px solid var(--border-soft)">
+        <div class="search-box">${icon('search')}<input class="input" placeholder="Tìm khách hàng, SĐT…" value="${esc(v.q)}" oninput="viewState.chats.q=this.value;render()"></div>
+      </div>
+      ${list.map(c => {
+        const u = chatUnread(c), last = c.msgs[c.msgs.length - 1] || {};
+        const ch = CHAN[c.channel] || CHAN.web;
+        return `<div class="msg-row ${cur && cur.id === c.id ? 'cur' : ''}" onclick="openChat('${c.id}')">
+          <div class="avatar" style="background:${ch.bg};color:${ch.color};flex:none">${esc(initials(c.name))}</div>
+          <div style="flex:1;min-width:0">
+            <div style="display:flex;align-items:center;gap:6px">
+              <b style="font-size:13px;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(c.name)}</b>
+              <span class="cell-sub" style="flex:none">${msgTime(last.ts || '')}</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px">
+              <span class="cell-sub" style="flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${last.from === 'me' ? 'Bạn: ' : ''}${esc((last.text || '').slice(0, 60))}</span>
+              ${u ? `<span class="msg-dot">${u}</span>` : ''}
+            </div>
+          </div>
+        </div>`;
+      }).join('') || `<div style="padding:30px;text-align:center" class="cell-sub">Chưa có hội thoại nào</div>`}
+    </div>
+    <div class="msg-pane card">
+      ${cur ? chatPaneHtml(cur) : `<div style="padding:60px 20px;text-align:center;color:var(--text-3)">
+        <div class="stat-icon tint-indigo" style="margin:0 auto 12px">${icon('mail')}</div>
+        Chọn một hội thoại bên trái để xem và trả lời tin nhắn</div>`}
+    </div>
+  </div>`;
+}
+
+function chatPaneHtml(c) {
+  const ch = CHAN[c.channel] || CHAN.web;
+  const cust = (c.customerId && byId(state.customers, c.customerId)) || null;
+  return `
+  <div class="msg-head">
+    <div class="avatar" style="background:${ch.bg};color:${ch.color}">${esc(initials(c.name))}</div>
+    <div style="flex:1;min-width:0">
+      <b style="font-size:13.5px">${esc(c.name)}</b>
+      <div class="cell-sub">${ch.label}${c.phone ? ' · ' + esc(c.phone) : ''}${cust ? ' · đã liên kết khách hàng' : ''}</div>
+    </div>
+    ${c.phone ? `<a class="btn btn-ghost btn-sm" style="text-decoration:none" target="_blank" rel="noopener" href="https://zalo.me/${(c.phone || '').replace(/\s/g, '')}" title="Mở Zalo">${icon('phone')} Zalo</a>` : ''}
+    <button class="btn btn-ghost btn-sm" onclick="linkChatCustomer('${c.id}')">${icon('users')} Liên kết</button>
+    <button class="icon-btn danger" title="Xóa hội thoại" onclick="deleteChat('${c.id}')">${icon('trash')}</button>
+  </div>
+  <div class="msg-stream" id="msgStream">
+    ${c.msgs.map(m => `
+    <div class="msg-b ${m.from === 'me' ? 'me' : ''}">
+      <div class="bubble">${esc(m.text)}</div>
+      <div class="cell-sub" style="font-size:10px;margin-top:3px">${msgTime(m.ts)}</div>
+    </div>`).join('')}
+  </div>
+  <div class="msg-tools">
+    <select class="select" style="max-width:170px;font-size:11.5px" onchange="if(this.value){$('#msgInput').value=this.value.replace('{name}','${esc((c.name || '').split(' ').slice(-1)[0] || '')}');this.value='';$('#msgInput').focus()}">
+      <option value="">⚡ Mẫu trả lời nhanh…</option>
+      ${MSG_TEMPLATES.map(t => `<option value="${esc(t)}">${esc(t.slice(0, 42))}…</option>`).join('')}
+    </select>
+    ${cust ? `<button class="btn btn-ghost btn-sm" onclick="sendChatLink('${c.id}','customer')" title="Gửi link cổng chọn ảnh cho khách">📷 Gửi link chọn ảnh</button>` : ''}
+  </div>
+  <div class="msg-input-row">
+    <input class="input" id="msgInput" placeholder="Nhập tin nhắn… (Enter để gửi)" onkeydown="if(event.key==='Enter')sendChatMsg('${c.id}')">
+    <button class="btn btn-primary" onclick="sendChatMsg('${c.id}')">${icon('check')} Gửi</button>
+  </div>`;
+}
+
+function openChat(id) {
+  __openChat = id;
+  const c = byId(state.chats, id);
+  if (c) c.lastRead = new Date().toISOString();
+  save();
+  render();
+  setTimeout(() => { const s = $('#msgStream'); if (s) s.scrollTop = s.scrollHeight; }, 60);
+}
+
+function sendChatMsg(id) {
+  const c = byId(state.chats, id);
+  const inp = $('#msgInput');
+  const text = (inp.value || '').trim();
+  if (!c || !text) return;
+  c.msgs.push({ from: 'me', text, ts: new Date().toISOString() });
+  c.lastRead = new Date().toISOString();
+  logAction('create', 'chat', 'Trả lời ' + c.name + ' (' + (CHAN[c.channel] || CHAN.web).label + ')');
+  save(); render();
+  setTimeout(() => { const s = $('#msgStream'); if (s) s.scrollTop = s.scrollHeight; }, 60);
+}
+
+function sendChatLink(id, kind) {
+  const c = byId(state.chats, id);
+  const cust = c && byId(state.customers, c.customerId);
+  if (!c || !cust) return;
+  const bk = state.bookings.filter(b => b.customerId === cust.id && b.portalToken).sort((a, b) => (b.date || '').localeCompare(a.date || ''))[0];
+  const url = bk ? location.origin + '/#portal-' + bk.portalToken : null;
+  const text = url
+    ? `Ảnh hậu kỳ của bạn đã sẵn sàng! Vui lòng thả tim ❤ chọn ảnh cần chỉnh sửa tại: ${url} (mã PIN albums hỏi studio nếu cần ạ)`
+    : 'Ảnh sẽ được studio gửi link chọn sau khi hậu kỳ xong ạ!';
+  c.msgs.push({ from: 'me', text, ts: new Date().toISOString() });
+  save(); render();
+  toast(url ? 'Đã thêm tin nhắn kèm link chọn ảnh' : 'Đã thêm tin nhắn (chưa có album nào có link)');
+  setTimeout(() => { const s = $('#msgStream'); if (s) s.scrollTop = s.scrollHeight; }, 60);
+}
+
+function openChatModal(id) {
+  const c = id ? byId(state.chats, id) : null;
+  openModal(`
+    <div class="modal-head"><h3>${c ? 'Sửa hội thoại' : 'Hội thoại mới'}</h3><button class="icon-btn" onclick="closeModal()">${icon('x')}</button></div>
+    <form id="frm" class="modal-body form-grid" onsubmit="return false;">
+      <div class="field"><label>Tên khách <span class="req">*</span></label><input class="input" name="name" required value="${esc(c ? c.name : '')}"></div>
+      <div class="field"><label>Số điện thoại / Zalo</label><input class="input" name="phone" value="${esc(c ? c.phone : '')}" placeholder="09xx xxx xxx"></div>
+      <div class="field full"><label>Kênh</label><select class="select" name="channel">
+        ${Object.entries(CHAN).map(([k, v]) => `<option value="${k}" ${c && c.channel === k ? 'selected' : ''}>${v.label}</option>`).join('')}
+      </select></div>
+      <div class="field full"><label>Tin nhắn gần nhất từ khách (nếu có)</label><input class="input" name="msg" placeholder="Dán nội dung tin khách nhắn gần nhất…"></div>
+    </form>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal()">Hủy</button>
+      <button class="btn btn-primary" onclick="saveChat('${id || ''}')">${icon('check')} Lưu</button>
+    </div>`);
+}
+
+function saveChat(id) {
+  const f = $('#frm');
+  if (!f.reportValidity()) return;
+  const fd = new FormData(f);
+  if (id) {
+    const c = byId(state.chats, id);
+    Object.assign(c, { name: fd.get('name').trim(), phone: fd.get('phone').trim(), channel: fd.get('channel') });
+  } else {
+    state.chats.push({ id: uid(), channel: fd.get('channel'), name: fd.get('name').trim(), phone: fd.get('phone').trim(), customerId: '', lastRead: '', msgs: fd.get('msg').trim() ? [{ from: 'them', text: fd.get('msg').trim(), ts: new Date().toISOString() }] : [] });
+    __openChat = state.chats[state.chats.length - 1].id;
+  }
+  save(); closeModal(); render();
+  toast('Đã lưu hội thoại');
+}
+
+function deleteChat(id) {
+  const c = byId(state.chats, id);
+  if (!c) return;
+  confirmDialog('Xóa hội thoại?', `Xóa hội thoại với <b>${esc(c.name)}</b>? Toàn bộ tin nhắn sẽ mất.`, 'Xóa', () => {
+    state.chats = state.chats.filter(x => x.id !== id);
+    if (__openChat === id) __openChat = null;
+    save(); render(); toast('Đã xóa hội thoại');
+  });
+}
+
+function linkChatCustomer(chatId) {
+  const c = byId(state.chats, chatId);
+  if (!c) return;
+  openModal(`
+    <div class="modal-head"><h3>Liên kết khách hàng</h3><button class="icon-btn" onclick="closeModal()">${icon('x')}</button></div>
+    <div class="modal-body">
+      <div class="field"><label>Chọn khách hàng trong danh sách</label>
+        <select class="select" id="linkCust">
+          <option value="">— Chưa liên kết —</option>
+          ${state.customers.map(x => `<option value="${x.id}" ${c.customerId === x.id ? 'selected' : ''}>${esc(x.name)}${x.phone ? ' · ' + esc(x.phone) : ''}</option>`).join('')}
+        </select></div>
+      <p class="form-hint">Liên kết để gửi link chọn ảnh, xem lịch sử chụp ngay từ hội thoại.</p>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal()">Đóng</button>
+      <button class="btn btn-primary" onclick="(function(){var v=document.getElementById('linkCust').value;byId(state.chats,'${chatId}').customerId=v;save();closeModal();render();toast(v?'Đã liên kết':'Đã bỏ liên kết')})()">${icon('check')} Lưu</button>
+    </div>`, 'sm');
+}
+
+function openChatConnModal() {
+  const st = state.settings.chat = state.settings.chat || {};
+  openModal(`
+    <div class="modal-head"><h3>Kết nối kênh nhắn tin</h3><button class="icon-btn" onclick="closeModal()">${icon('x')}</button></div>
+    <div class="modal-body">
+      <div style="background:#f8fafc;border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:12px">
+        <b style="font-size:13px">💬 Zalo Official Account (OA)</b>
+        <p style="font-size:12px;color:var(--text-2);line-height:1.6;margin:6px 0 8px">Nhận & trả lời tin nhắn Zalo ngay trong app. Cần: <b>OA ID</b> và <b>Access Token</b> từ Zalo OA (business.zalo.me → Quản trị OA → API/Token).</p>
+        <input class="input" id="connZaloOa" placeholder="OA ID" value="${esc(st.zaloOaId || '')}" style="margin-bottom:6px">
+        <input class="input" id="connZaloTk" placeholder="Access Token" value="${esc(st.zaloToken || '')}">
+      </div>
+      <div style="background:#f8fafc;border:1px solid var(--border);border-radius:12px;padding:14px">
+        <b style="font-size:13px">📘 Facebook Fanpage</b>
+        <p style="font-size:12px;color:var(--text-2);line-height:1.6;margin:6px 0 8px">Nhận & trả lời tin nhắn Fanpage. Cần: <b>Page ID</b> và <b>Page Access Token</b> (developers.facebook.com → tạo app → Messenger → lấy token trang). Webhook server đã sẵn sàng.</p>
+        <input class="input" id="connFbPage" placeholder="Page ID" value="${esc(st.fbPageId || '')}" style="margin-bottom:6px">
+        <input class="input" id="connFbTk" placeholder="Page Access Token" value="${esc(st.fbToken || '')}">
+      </div>
+      <p class="form-hint" style="margin-top:10px">Lưu token ở đây trước — khi bạn có token (cần đăng ký Zalo OA / Facebook Developer), báo tôi để tôi bật phần nhận & gửi tin thật trên server. Chưa có token vẫn dùng được ngay: hội thoại thủ công + nút mở Zalo trực tiếp.</p>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal()">Đóng</button>
+      <button class="btn btn-primary" onclick="saveChatConn()">${icon('check')} Lưu kết nối</button>
+    </div>`, 'sm');
+}
+
+function saveChatConn() {
+  state.settings.chat = {
+    zaloOaId: $('#connZaloOa').value.trim(), zaloToken: $('#connZaloTk').value.trim(),
+    fbPageId: $('#connFbPage').value.trim(), fbToken: $('#connFbTk').value.trim(),
+  };
+  logAction('update', 'settings', 'Cấu hình kết nối Zalo/Fanpage');
+  save(); closeModal(); toast('Đã lưu cấu hình kết nối — sau khi deploy backend sẽ nhận tin thật');
+}
+
 function compressImageFile(file) {
   return new Promise((res, rej) => {
     const r = new FileReader();
@@ -5614,7 +5883,7 @@ const ENTITY_LABEL = {
   user: 'Tài khoản', customer: 'Khách hàng', booking: 'Lịch chụp', order: 'Đơn hàng',
   task: 'Công việc', column: 'Cột công việc', outfit: 'Trang phục', concept: 'Concept',
   loan: 'Phiếu mượn', settings: 'Cài đặt', system: 'Hệ thống',
-  expense: 'Chi phí', payroll: 'Lương', contract: 'Hợp đồng', portal: 'Cổng KH', attendance: 'Chấm công', cash: 'Thu chi',
+  expense: 'Chi phí', payroll: 'Lương', contract: 'Hợp đồng', portal: 'Cổng KH', attendance: 'Chấm công', cash: 'Thu chi', chat: 'Nhắn tin',
 };
 
 function logAction(action, entity, target, user) {
