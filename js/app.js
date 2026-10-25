@@ -132,14 +132,20 @@ let __serverHasUsers = null, __serverStudioName = ''; // hỏi server: đã có 
 let __saveTimer = null, __stateDirty = false;
 
 async function detectServer() {
-  try {
-    const ctl = new AbortController();
-    const t = setTimeout(() => ctl.abort(), 900);
-    const r = await fetch('/api/ping', { signal: ctl.signal });
-    clearTimeout(t);
-    const j = await r.json();
-    SERVER_MODE = !!(j && j.ok);
-  } catch (e) { SERVER_MODE = false; }
+  // 2 lượt: server Render free có thể đang "ngủ" và cần chờ thức dậy (lỗi mạng/timeout mới thử lại)
+  for (let i = 0; i < 2; i++) {
+    if (i) await new Promise(r => setTimeout(r, 2500));
+    try {
+      const ctl = new AbortController();
+      const t = setTimeout(() => ctl.abort(), 8000);
+      const r = await fetch('/api/ping', { signal: ctl.signal });
+      clearTimeout(t);
+      const j = await r.json().catch(() => null);
+      SERVER_MODE = !!(j && j.ok);
+      return; // có phản hồi (dù 404/HTML) → kết luận được, không thử lại
+    } catch (e) { }
+  }
+  SERVER_MODE = false;
 }
 
 async function loadFromServer() {
@@ -5089,6 +5095,28 @@ async function init() {
   const u = sid ? byId(state.users, sid.userId) : null;
   if (u && u.active) startApp(u.id, false);
   else { localStorage.removeItem(SESSION_KEY); showAuth(); }
+
+  // Server có thể đang ngủ (Render free) → thử lại nền mỗi 10 giây; khi thức dậy thì đổi sang form Đăng nhập
+  if (!SERVER_MODE && !state.users.length) {
+    (async () => {
+      for (let i = 0; i < 12; i++) {
+        await new Promise(r => setTimeout(r, 10000));
+        try {
+          const r2 = await fetch('/api/ping');
+          const j = await r2.json().catch(() => null);
+          if (j && j.ok) {
+            SERVER_MODE = true;
+            try {
+              const h = await fetch('/api/has-users');
+              if (h.ok) { const hj = await h.json(); __serverHasUsers = hj.users > 0; __serverStudioName = hj.studioName || ''; }
+            } catch (e) { }
+            renderAuthForm();
+            return;
+          }
+        } catch (e) { }
+      }
+    })();
+  }
 
   window.addEventListener('hashchange', () => {
     const v = (location.hash || '').replace('#', '');
