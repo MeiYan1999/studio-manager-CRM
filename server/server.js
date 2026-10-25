@@ -24,8 +24,15 @@ const pool = new Pool({
 const app = express();
 app.use(express.json({ limit: '10mb' })); // đọc JSON body cho mọi API POST (lỗi từng quên dòng này → không lưu gì được lên server)
 
-// Session giữ trong bộ nhớ — khởi động lại server thì mọi người đăng nhập lại (an toàn)
-const sessions = new Map(); // token -> userId
+// Phiên đăng nhập lưu trong DATABASE — sống qua mọi lần server khởi động lại (Render free hay restart)
+async function authUser(req) {
+  const token = (req.body && req.body.token) || req.query.token;
+  if (!token) return null;
+  try {
+    const r = await pool.query('SELECT user_id FROM sessions WHERE token = $1', [token]);
+    return r.rows[0] ? r.rows[0].user_id : null;
+  } catch (e) { return null; }
+}
 
 // Phải trùng tiền tố băm với frontend (js/app.js → hashPassword)
 function sha256(s) {
@@ -38,17 +45,14 @@ async function getState() {
 }
 
 async function setState(data) {
-  await pool.query(
+  const r = await pool.query(
     `INSERT INTO app_state (id, data, updated_at) VALUES (1, $1, now())
-     ON CONFLICT (id) DO UPDATE SET data = $1, updated_at = now()`,
+     ON CONFLICT (id) DO UPDATE SET data = $1, updated_at = now()
+     RETURNING updated_at`,
     [JSON.stringify(data)]
   );
+  return r.rows[0] ? r.rows[0].updated_at : null;
 }
-
-const authUser = (req) => {
-  const token = (req.body && req.body.token) || req.query.token;
-  return token && sessions.get(token);
-};
 
 // ---- API ----
 
@@ -79,24 +83,33 @@ app.post('/api/login', async (req, res) => {
     }
     if (!u.active) return res.status(403).json({ error: 'Tài khoản đã bị khóa' });
     const token = crypto.randomUUID();
-    sessions.set(token, u.id);
+    await pool.query('INSERT INTO sessions (token, user_id) VALUES ($1, $2)', [token, u.id]);
     res.json({ ok: true, token, userId: u.id });
   } catch (e) {
     res.status(500).json({ error: 'Lỗi máy chủ: ' + e.message });
   }
 });
 
-app.post('/api/logout', (req, res) => {
+app.post('/api/logout', async (req, res) => {
   const token = (req.body && req.body.token) || req.query.token;
-  if (token) sessions.delete(token);
+  if (token) { try { await pool.query('DELETE FROM sessions WHERE token = $1', [token]); } catch (e) { } }
   res.json({ ok: true });
 });
 
 // Lấy toàn bộ dữ liệu (đã đăng nhập)
 app.get('/api/state', async (req, res) => {
-  if (!authUser(req)) return res.status(401).json({ error: 'Chưa đăng nhập' });
+  if (!(await authUser(req))) return res.status(401).json({ error: 'Chưa đăng nhập' });
   try { res.json((await getState()) || {}); }
   catch (e) { res.status(500).json({ error: 'Lỗi máy chủ: ' + e.message }); }
+});
+
+// Phiên bản dữ liệu (nhẹ) — các máy poll để biết khi nào cần kéo dữ liệu mới
+app.get('/api/state-version', async (req, res) => {
+  if (!(await authUser(req))) return res.status(401).json({ error: 'Chưa đăng nhập' });
+  try {
+    const r = await pool.query('SELECT updated_at FROM app_state WHERE id = 1');
+    res.json({ ok: true, v: r.rows[0] ? r.rows[0].updated_at : null });
+  } catch (e) { res.status(500).json({ error: 'Lỗi máy chủ: ' + e.message }); }
 });
 
 // Lưu toàn bộ dữ liệu (đã đăng nhập).
@@ -110,9 +123,9 @@ app.post('/api/state', async (req, res) => {
     if (!body.state || !Array.isArray(body.state.customers)) {
       return res.status(400).json({ error: 'Dữ liệu không hợp lệ' });
     }
-    if (!authUser(req) && !noUsersYet) return res.status(401).json({ error: 'Chưa đăng nhập' });
-    await setState(body.state);
-    res.json({ ok: true });
+    if (!(await authUser(req)) && !noUsersYet) return res.status(401).json({ error: 'Chưa đăng nhập' });
+    const v = await setState(body.state);
+    res.json({ ok: true, v });
   } catch (e) {
     res.status(500).json({ error: 'Lỗi máy chủ: ' + e.message });
   }
@@ -165,6 +178,11 @@ app.get('/', (req, res) => res.sendFile(path.join(__dirname, '..', 'index.html')
       id int PRIMARY KEY,
       data jsonb NOT NULL,
       updated_at timestamptz DEFAULT now()
+    )`);
+    await pool.query(`CREATE TABLE IF NOT EXISTS sessions (
+      token text PRIMARY KEY,
+      user_id text NOT NULL,
+      created_at timestamptz DEFAULT now()
     )`);
     app.listen(PORT, () => {
       console.log('');

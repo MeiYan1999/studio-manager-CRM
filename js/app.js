@@ -165,6 +165,30 @@ function save() {
 }
 
 let __galleryTouchedAt = 0; // studio vừa sửa album thì 3 phút đầu ưu tiên bản local
+let __lastVer = null, __pollTimer = null;
+
+// Chế độ online: tự kéo dữ liệu mới từ server mỗi 15 giây (máy khác sửa → máy này cập nhật)
+function startServerPoll() {
+  if (!SERVER_MODE || !API_TOKEN || __pollTimer) return;
+  __pollTimer = setInterval(async () => {
+    if (__stateDirty || !API_TOKEN) return; // đang chờ đẩy dữ liệu lên — kéo sau
+    try {
+      const r = await fetch('/api/state-version?token=' + encodeURIComponent(API_TOKEN));
+      if (r.status === 401) { clearInterval(__pollTimer); __pollTimer = null; logout(); return; }
+      if (!r.ok) return;
+      const j = await r.json();
+      if (!j.v) return;
+      if (__lastVer && String(j.v) !== String(__lastVer)) {
+        const st = await loadFromServer();
+        adoptState(st);
+        __lastVer = j.v;
+        const mr = document.getElementById('modalRoot');
+        const authShown = document.getElementById('authScreen').classList.contains('show');
+        if (!authShown && (!mr || !mr.childElementCount) && currentUser()) render();
+      } else if (!__lastVer) __lastVer = j.v;
+    } catch (e) { }
+  }, 15000);
+}
 
 async function pushState() {
   if (!__stateDirty) return;
@@ -192,6 +216,8 @@ async function pushState() {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ token: API_TOKEN, state }),
     });
+    const j = await r.json().catch(() => null);
+    if (j && j.v) __lastVer = j.v;
     if (!r.ok && r.status !== 401) { __stateDirty = true; toast('⚠ Dữ liệu chưa đồng bộ lên server — sẽ thử lại khi bạn thao tác tiếp', 'error'); }
   } catch (e) { __stateDirty = true; }
 }
@@ -2943,6 +2969,7 @@ async function authLogin() {
   u.lastLogin = todayStr();
   logAction('login', 'user', u.username, u);
   save();
+  startServerPoll();
   startApp(u.id, true);
 }
 
@@ -3004,10 +3031,13 @@ function updateAuthUI() {
 function logout() {
   const u = currentUser();
   if (u) { logAction('logout', 'user', u.username, u); save(); }
+  if (__pollTimer) { clearInterval(__pollTimer); __pollTimer = null; }
+  if (SERVER_MODE && API_TOKEN) { try { fetch('/api/logout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: API_TOKEN }) }).catch(() => { }); } catch (e) { } }
   localStorage.removeItem(SESSION_KEY);
   API_TOKEN = '';
   localStorage.removeItem('mementoCRM_token');
   __currentUserId = null;
+  __lastVer = null;
   closeModal();
   showAuth();
 }
@@ -5080,8 +5110,10 @@ async function init() {
   if (SERVER_MODE && API_TOKEN) {
     try { adoptState(await loadFromServer()); loaded = true; }
     catch (e) {
-      if (e && e.status === 401) { localStorage.removeItem(SESSION_KEY); API_TOKEN = ''; }
-      SERVER_MODE = false; // máy chủ không khả dụng → dùng cache cục bộ
+      if (e && e.status === 401) {
+        // Server còn sống nhưng phiên hết hạn → vào lại màn đăng nhập (KHÔNG rơi chế độ offline)
+        localStorage.removeItem(SESSION_KEY); API_TOKEN = '';
+      } else SERVER_MODE = false; // chỉ offline khi server không phản hồi (mạng/đang ngủ)
     }
   }
   if (!loaded) load();
@@ -5093,7 +5125,7 @@ async function init() {
   let sid = null;
   try { sid = JSON.parse(localStorage.getItem(SESSION_KEY) || 'null'); } catch (e) { sid = null; }
   const u = sid ? byId(state.users, sid.userId) : null;
-  if (u && u.active) startApp(u.id, false);
+  if (u && u.active) { startApp(u.id, false); startServerPoll(); }
   else { localStorage.removeItem(SESSION_KEY); showAuth(); }
 
   // Server có thể đang ngủ (Render free) → thử lại nền mỗi 10 giây; khi thức dậy thì đổi sang form Đăng nhập
