@@ -67,6 +67,14 @@ const CATS = ['Cưới', 'Gia đình', 'Chân dung', 'Sản phẩm', 'Sự kiệ
 const CAT_CLS = { 'Cưới': 'b-cat-cuoi', 'Gia đình': 'b-cat-giadinh', 'Chân dung': 'b-cat-chandung', 'Sản phẩm': 'b-cat-sanpham', 'Sự kiện': 'b-cat-sukien', 'Khác': 'b-cat-khac' };
 const ROLES = { photographer: 'Thợ Chụp', editor: 'Hậu kỳ', assistant: 'Sale Onl', stylist: 'Stylist', saleoff: 'Sale Off', manager: 'Quản lý' };
 
+// Ca làm việc — giờ chuẩn để tính đi muộn / về sớm theo từng nhân sự
+const SHIFTS = {
+  ca1: { short: 'Ca 1', label: 'Ca 1 (7:30–17:30)', start: '07:30', end: '17:30' },
+  normal: { short: 'Ca thường', label: 'Ca thường (8:30–18:30)', start: '08:30', end: '18:30' },
+  ca2: { short: 'Ca 2', label: 'Ca 2 (9:00–19:00)', start: '09:00', end: '19:00' },
+};
+const shiftOf = s => SHIFTS[(s && s.shift) || 'normal'] || SHIFTS.normal;
+
 const TITLES = {
   dashboard: ['Tổng quan', 'Bức tranh kinh doanh của studio'],
   bookings:  ['Lịch chụp', 'Quản lý lịch hẹn và tiến trình chụp'],
@@ -168,8 +176,66 @@ let __galleryTouchedAt = 0; // studio vừa sửa album thì 3 phút đầu ưu 
 let __lastVer = null, __pollTimer = null;
 
 // Chế độ online: tự kéo dữ liệu mới từ server mỗi 15 giây (máy khác sửa → máy này cập nhật)
+let __presenceList = {}; // userId -> lastSeen ISO
+let __hbTimer = null;
+
+async function heartbeat() {
+  if (!SERVER_MODE || !API_TOKEN) return;
+  try {
+    await fetch('/api/presence', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: API_TOKEN }) });
+  } catch (e) { }
+  refreshPresence();
+}
+
+async function refreshPresence() {
+  if (!SERVER_MODE || !API_TOKEN) { paintPresence(); return; }
+  try {
+    const r = await fetch('/api/presence?token=' + encodeURIComponent(API_TOKEN));
+    if (!r.ok) return;
+    const j = await r.json();
+    __presenceList = {};
+    (j.list || []).forEach(x => __presenceList[x.userId] = x.lastSeen);
+    paintPresence();
+  } catch (e) { }
+}
+
+function lastSeenText(iso) {
+  if (!iso) return 'chưa thấy hoạt động';
+  const s = (Date.now() - new Date(iso).getTime()) / 1000;
+  if (s < 180) return 'đang hoạt động';
+  if (s < 3600) return Math.max(1, Math.round(s / 60)) + ' phút trước';
+  if (s < 86400) return Math.round(s / 3600) + ' giờ trước';
+  return 'ngày ' + fmtDate(String(iso).slice(0, 10));
+}
+
+function paintPresence() {
+  const box = document.getElementById('presenceBox');
+  if (!box) return;
+  const me = currentUser();
+  if (!SERVER_MODE) {
+    box.innerHTML = `<div class="card" style="padding:14px 18px;margin-bottom:16px;display:flex;gap:10px;align-items:center">
+      <span class="pres-chip on"><span class="dot"></span>${esc(me ? me.username : '')}<i>đang hoạt động</i></span>
+      <span class="cell-sub">Phiên bản trên máy — mở bản online (nhiều máy) mới thấy ai đang hoạt động, ai offline.</span></div>`;
+    return;
+  }
+  const users = state.users.filter(u => u.active);
+  const isOn = u => { const t = __presenceList[u.id]; return !!t && (Date.now() - new Date(t).getTime()) < 180000; };
+  const online = users.filter(isOn).length;
+  box.innerHTML = `<div class="card" style="padding:14px 18px;margin-bottom:16px">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+      <h3 style="font-size:14.5px;font-weight:700">Hoạt động</h3>
+      <span class="badge ${online ? 'b-confirmed' : 'b-inactive'}">${online}/${users.length} đang online</span>
+      <span class="cell-sub">cập nhật mỗi phút · online = hoạt động trong 3 phút gần nhất</span>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      ${users.map(u => { const on = isOn(u); return `<span class="pres-chip ${on ? 'on' : ''}" title="${esc(u.name)} — ${lastSeenText(__presenceList[u.id])}"><span class="dot"></span>${esc(u.username)}<i>${on ? 'online' : lastSeenText(__presenceList[u.id])}</i></span>`; }).join('')}
+    </div></div>`;
+}
+
 function startServerPoll() {
   if (!SERVER_MODE || !API_TOKEN || __pollTimer) return;
+  heartbeat();
+  if (!__hbTimer) __hbTimer = setInterval(heartbeat, 60000);
   __pollTimer = setInterval(async () => {
     if (__stateDirty || !API_TOKEN) return; // đang chờ đẩy dữ liệu lên — kéo sau
     try {
@@ -2420,6 +2486,7 @@ function openStaffModal(id) {
     <form id="frm" class="modal-body form-grid" onsubmit="return false;">
       <div class="field"><label>Họ và tên <span class="req">*</span></label><input class="input" name="name" required value="${esc(s ? s.name : '')}"></div>
       <div class="field"><label>Vai trò</label><select class="select" name="role">${roleOpts}</select></div>
+      <div class="field"><label>Ca làm việc</label><select class="select" name="shift">${Object.entries(SHIFTS).map(([k, v]) => `<option value="${k}" ${s && s.shift === k ? 'selected' : ''}>${v.label}</option>`).join('')}</select><div class="form-hint">Giờ chuẩn để tính đi muộn / về sớm khi chấm công</div></div>
       <div class="field"><label>Bộ phận</label><select class="select" name="deptId"><option value="">— Chưa gán —</option>${state.departments.map(d => `<option value="${d.id}" ${s && s.deptId === d.id ? 'selected' : ''}>${esc(d.name)}</option>`).join('')}</select></div>
       <div class="field"><label>Chi nhánh</label><select class="select" name="branchId">${state.branches.map(x => `<option value="${x.id}" ${(s ? s.branchId === x.id : x.id === curBranchId()) ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select></div>
       <div class="field"><label>Mục tiêu doanh số / tháng (₫)</label><input class="input" name="target" type="number" min="0" step="1000000" value="${s ? (+s.target || 0) : 0}"></div>
@@ -2447,7 +2514,7 @@ function saveStaff(id) {
   if (!f.reportValidity()) return;
   const fd = new FormData(f);
   const data = {
-    name: fd.get('name').trim(), role: fd.get('role'),
+    name: fd.get('name').trim(), role: fd.get('role'), shift: fd.get('shift'),
     deptId: fd.get('deptId') || '', target: Math.round(+fd.get('target') || 0),
     branchId: fd.get('branchId') || curBranchId(),
     phone: fd.get('phone').trim(), email: fd.get('email').trim(),
@@ -3127,6 +3194,7 @@ function logout() {
   const u = currentUser();
   if (u) { logAction('logout', 'user', u.username, u); save(); }
   if (__pollTimer) { clearInterval(__pollTimer); __pollTimer = null; }
+  if (__hbTimer) { clearInterval(__hbTimer); __hbTimer = null; }
   if (SERVER_MODE && API_TOKEN) { try { fetch('/api/logout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: API_TOKEN }) }).catch(() => { }); } catch (e) { } }
   localStorage.removeItem(SESSION_KEY);
   API_TOKEN = '';
@@ -3838,11 +3906,12 @@ function workedHours(rec) {
   return Math.max(0, Math.round((toMin(rec.out) - toMin(rec.in)) / 15) * 15 / 60);
 }
 
-function attStatus(rec) {
-  if (!rec || !rec.in) return { label: 'Chưa điểm danh', cls: 'b-inactive' };
-  const late = toMin(rec.in) > toMin(state.settings.workStart || '09:00');
-  const early = rec.out && toMin(rec.out) < toMin(state.settings.workEnd || '18:00');
-  if (!rec.out) return late ? { label: 'Muộn · đang làm', cls: 'b-pending' } : { label: 'Đang làm việc', cls: 'b-confirmed' };
+function attStatus(rec, sh) {
+  if (!rec || !rec.in) return { label: 'Chưa vào ca', cls: 'b-inactive' };
+  const S = sh || shiftOf(null);
+  const late = toMin(rec.in) > toMin(S.start);
+  const early = rec.out && toMin(rec.out) < toMin(S.end);
+  if (!rec.out) return late ? { label: 'Muộn · đang trong ca', cls: 'b-pending' } : { label: 'Đang trong ca', cls: 'b-confirmed' };
   if (late || early) {
     const parts = [];
     if (late) parts.push('đi muộn');
@@ -3879,9 +3948,9 @@ function renderTopbarAttendance() {
     : '';
   if (!u.staffId) { box.innerHTML = `${bell}<button class="punch-btn done" title="Tài khoản chưa liên kết nhân sự — quản trị sửa trong Tài khoản & Quyền">${icon('clock')} Chấm công</button>`; return; }
   const rec = attOf(u.staffId, todayStr());
-  if (!rec) box.innerHTML = `<button class="punch-btn" onclick="selfPunch()">${icon('clock')} Điểm danh vào</button>`;
-  else if (!rec.out) box.innerHTML = `<span class="punch-time">${icon('clock')} vào ${rec.in}</span> <button class="punch-btn" onclick="selfPunch()">Điểm danh ra</button>`;
-  else box.innerHTML = `<button class="punch-btn done" title="${fmtDate(rec.date)}: ${rec.in} – ${rec.out}">${icon('check')} ${rec.in}–${rec.out} (${workedHours(rec)}h)</button>`;
+  if (!rec) box.innerHTML = `${bell}<button class="punch-btn in" onclick="selfPunch()">${icon('clock')} ▶ Vào ca</button>`;
+  else if (!rec.out) box.innerHTML = `${bell}<span class="punch-time">${icon('clock')} trong ca từ ${rec.in}</span> <button class="punch-btn out" onclick="selfPunch()">■ Thoát ca</button>`;
+  else box.innerHTML = `${bell}<button class="punch-btn done" title="${fmtDate(rec.date)}: vào ca ${rec.in} – thoát ca ${rec.out}">${icon('check')} ${rec.in}–${rec.out} (${workedHours(rec)}h) ✓</button>`;
 }
 
 /* ---- GPS khi chấm công ---- */
@@ -3950,14 +4019,14 @@ async function selfPunch() {
     : ' · (không lấy được GPS)';
   const rec = attOf(u.staffId, todayStr());
   if (!rec) {
-    state.attendance.push({ id: uid(), staffId: u.staffId, date: todayStr(), in: time, out: '', note: 'Tự điểm danh' + (geo ? '' : ' (không có GPS)'), inGeo: geo || undefined, createdAt: todayStr() });
-    logAction('create', 'attendance', staffName(u.staffId) + ' điểm danh vào ' + time + (geo ? ' (có GPS)' : ' (không GPS)'));
-    toast('Đã điểm danh vào lúc ' + time + ' 👋' + where);
+    state.attendance.push({ id: uid(), staffId: u.staffId, date: todayStr(), in: time, out: '', note: 'Tự chấm công' + (geo ? '' : ' (không có GPS)'), inGeo: geo || undefined, createdAt: todayStr() });
+    logAction('create', 'attendance', staffName(u.staffId) + ' VÀO CA ' + time + (geo ? ' (có GPS)' : ' (không GPS)'));
+    toast('Đã VÀO CA lúc ' + time + ' 👋' + where);
   } else if (!rec.out) {
     rec.out = time;
     rec.outGeo = geo || undefined;
-    logAction('update', 'attendance', staffName(u.staffId) + ' điểm danh ra ' + time + ' (' + workedHours(rec) + ' giờ)');
-    toast('Đã điểm danh ra lúc ' + time + ' — làm việc ' + workedHours(rec) + ' giờ hôm nay' + where);
+    logAction('update', 'attendance', staffName(u.staffId) + ' THOÁT CA ' + time + ' (' + workedHours(rec) + ' giờ)');
+    toast('Đã THOÁT CA lúc ' + time + ' — làm việc ' + workedHours(rec) + ' giờ hôm nay' + where);
   } else { toast('Hôm nay bạn đã chấm công đủ rồi ✓', 'error'); return; }
   save(); renderTopbarAttendance(); render();
 }
@@ -3967,7 +4036,9 @@ function attendanceView() {
   const v = viewState.attendance;
   const tab = (t, label) => `<button class="${v.tab === t ? 'active' : ''}" onclick="viewState.attendance.tab='${t}';render()">${label}</button>`;
   const body = v.tab === 'month' ? attendanceMonthTab() : attendanceDayTab();
+  setTimeout(refreshPresence, 80);
   return `
+  <div id="presenceBox"></div>
   <div class="toolbar">
     <div class="pill-toggle">${tab('day', 'Theo ngày')}${tab('month', 'Tháng này')}</div>
     ${v.tab === 'month'
@@ -3983,21 +4054,22 @@ function attendanceDayTab() {
   const done = list.filter(s => attOf(s.id, date)).length;
   return `
   <div class="stat-grid" style="grid-template-columns:repeat(3,1fr)">
-    ${statCard('clock', 'tint-blue', done + '/' + list.length, 'Nhân sự đã điểm danh', `<span class="stat-sub muted">${weekday(date)}, ${fmtDate(date)} · giờ làm ${state.settings.workStart}–${state.settings.workEnd}</span>`)}
-    ${statCard('alert', 'tint-amber', list.filter(s => { const r = attOf(s.id, date); return r && toMin(r.in) > toMin(state.settings.workStart); }).length, 'Đi muộn', '')}
+    ${statCard('clock', 'tint-blue', done + '/' + list.length, 'Nhân sự đã vào ca', `<span class="stat-sub muted">${weekday(date)}, ${fmtDate(date)} · giờ chuẩn theo ca từng người</span>`)}
+    ${statCard('alert', 'tint-amber', list.filter(s => { const r = attOf(s.id, date); return r && toMin(r.in) > toMin(shiftOf(s).start); }).length, 'Đi muộn (theo ca)', '')}
     ${statCard('user', 'tint-cyan', list.length - done, 'Chưa điểm danh', '')}
   </div>
   <div class="card list-wrap"><div class="table-wrap">
   <table>
-    <thead><tr><th>Nhân sự</th><th>Vào</th><th>Ra</th><th class="ta-r">Giờ làm</th><th>Trạng thái</th><th>Vị trí chấm công</th><th>Ghi chú</th><th class="ta-c">Thao tác</th></tr></thead>
+    <thead><tr><th>Nhân sự</th><th>Vào ca</th><th>Thoát ca</th><th class="ta-r">Giờ làm</th><th>Trạng thái</th><th>Vị trí chấm công</th><th>Ghi chú</th><th class="ta-c">Thao tác</th></tr></thead>
     <tbody>
     ${list.map(s => {
       const r = attOf(s.id, date);
-      const st = attStatus(r);
+      const st = attStatus(r, shiftOf(s));
+      const sh = shiftOf(s);
       return `<tr>
-        <td><div class="cell-main">${esc(s.name)}</div><div class="cell-sub">${ROLES[s.role] || ''}</div></td>
-        <td class="${r && toMin(r.in) > toMin(state.settings.workStart) ? 'loan-late' : 'money-muted'}">${r ? r.in : '—'}</td>
-        <td class="${r && r.out && toMin(r.out) < toMin(state.settings.workEnd) ? 'loan-late' : 'money-muted'}">${r && r.out ? r.out : '—'}</td>
+        <td><div class="cell-main">${esc(s.name)}</div><div class="cell-sub">${ROLES[s.role] || ''} · ${sh.short} (${sh.start}–${sh.end})</div></td>
+        <td class="${r && toMin(r.in) > toMin(sh.start) ? 'loan-late' : 'money-muted'}">${r ? r.in : '—'}</td>
+        <td class="${r && r.out && toMin(r.out) < toMin(sh.end) ? 'loan-late' : 'money-muted'}">${r && r.out ? r.out : '—'}</td>
         <td class="money ta-r">${r && r.out ? workedHours(r) + 'h' : '—'}</td>
         <td><span class="badge ${st.cls}">${st.label}</span></td>
         <td style="max-width:190px;font-size:11.5px">${r ? geoCellHtml(r.inGeo) : '<span class="cell-sub">—</span>'}</td>
@@ -4015,7 +4087,7 @@ function attendanceMonthTab() {
   const rows = list.map(s => {
     const recs = state.attendance.filter(a => a.staffId === s.id && (a.date || '').startsWith(month));
     const hours = recs.reduce((t, r) => t + workedHours(r), 0);
-    const lates = recs.filter(r => toMin(r.in) > toMin(state.settings.workStart)).length;
+    const lates = recs.filter(r => toMin(r.in) > toMin(shiftOf(s).start)).length;
     const noOut = recs.filter(r => !r.out).length;
     return { s, days: recs.length, hours, lates, noOut };
   });
@@ -4094,12 +4166,12 @@ function attMonthData() {
       const h = recs.reduce((t, r) => t + workedHours(r), 0);
       return { name: s.name, days: recs.length, hours: Math.round(h * 10) / 10,
         avg: recs.length ? Math.round(h / recs.length * 10) / 10 : 0,
-        lates: recs.filter(r => toMin(r.in) > toMin(st.workStart)).length };
+        lates: recs.filter(r => toMin(r.in) > toMin(shiftOf(s).start)).length };
     }),
     detail: state.staff.filter(s => s.active).flatMap(s =>
       state.attendance.filter(a => a.staffId === s.id && (a.date || '').startsWith(month))
         .sort((a, b) => (a.date || '').localeCompare(b.date || ''))
-        .map(a => ({ name: s.name, date: a.date, in: a.in, out: a.out || '', hours: a.out ? workedHours(a) : '', status: attStatus(a).label, note: a.note || '' }))
+        .map(a => ({ name: s.name, date: a.date, in: a.in, out: a.out || '', hours: a.out ? workedHours(a) : '', status: attStatus(a, shiftOf(s)).label, note: a.note || '' }))
     ),
   };
 }

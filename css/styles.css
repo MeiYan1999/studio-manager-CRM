@@ -746,3 +746,17 @@ tbody tr.row-overdue:hover { background: #ffe4e4; }
   .stat-card:hover { transform: none; }
   .dash-hero::after { display: none; }
 }
+
+/* ---- Ca làm việc & Hoạt động (online/offline) ---- */
+.punch-btn.in { background: #ecfdf5; border-color: #6ee7b7; color: #047857; }
+.punch-btn.in:hover { background: #d1fae5; }
+.punch-btn.out { background: #fef2f2; border-color: #fca5a5; color: #b91c1c; }
+.punch-btn.out:hover { background: #fee2e2; }
+.pres-chip {
+  display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px;
+  border-radius: 999px; background: #f1f5f9; font-size: 12px; font-weight: 700; color: var(--text-2);
+}
+.pres-chip .dot { width: 8px; height: 8px; border-radius: 50%; background: #94a3b8; flex: none; }
+.pres-chip.on { background: #ecfdf5; color: #047857; }
+.pres-chip.on .dot { background: #10b981; box-shadow: 0 0 0 3px rgba(16, 185, 129, .18); }
+.pres-chip i { font-style: normal; font-weight: 500; font-size: 10.5px; color: var(--text-3); }

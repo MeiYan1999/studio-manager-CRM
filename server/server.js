@@ -168,6 +168,25 @@ app.post('/api/portal-select', async (req, res) => {
   } catch (e) { res.status(500).json({ error: 'Lỗi máy chủ: ' + e.message }); }
 });
 
+// Ai đang hoạt động — app gửi heartbeat mỗi phút, lưu DB
+app.post('/api/presence', async (req, res) => {
+  const uid2 = await authUser(req);
+  if (!uid2) return res.status(401).json({ error: 'Chưa đăng nhập' });
+  try {
+    await pool.query(`INSERT INTO presence (user_id, last_seen) VALUES ($1, now())
+      ON CONFLICT (user_id) DO UPDATE SET last_seen = now()`, [uid2]);
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: 'Lỗi máy chủ: ' + e.message }); }
+});
+
+app.get('/api/presence', async (req, res) => {
+  if (!(await authUser(req))) return res.status(401).json({ error: 'Chưa đăng nhập' });
+  try {
+    const r = await pool.query('SELECT user_id, last_seen FROM presence');
+    res.json({ ok: true, list: r.rows.map(x => ({ userId: x.user_id, lastSeen: x.last_seen })) });
+  } catch (e) { res.status(500).json({ error: 'Lỗi máy chủ: ' + e.message }); }
+});
+
 // ---- Phục vụ frontend (thư mục gốc của project) ----
 app.use(express.static(path.join(__dirname, '..')));
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, '..', 'index.html')));
@@ -183,6 +202,10 @@ app.get('/', (req, res) => res.sendFile(path.join(__dirname, '..', 'index.html')
       token text PRIMARY KEY,
       user_id text NOT NULL,
       created_at timestamptz DEFAULT now()
+    )`);
+    await pool.query(`CREATE TABLE IF NOT EXISTS presence (
+      user_id text PRIMARY KEY,
+      last_seen timestamptz DEFAULT now()
     )`);
     app.listen(PORT, () => {
       console.log('');
