@@ -76,9 +76,10 @@ const SHIFTS = {
 const shiftOf = s => SHIFTS[(s && s.shift) || 'normal'] || SHIFTS.normal;
 
 // ---- Nhật ký cập nhật (changelog) ----
-const APP_VERSION = '3.4';
+const APP_VERSION = '3.5';
 const CL_KIND = { new: ['✨ mới', 'b-delivered'], fix: ['🐛 sửa lỗi', 'b-unpaid'], ui: ['🎨 giao diện', 'b-deposit'], imp: ['⚡ nâng cấp', 'b-confirmed'] };
 const CHANGELOG = [
+  { v: '3.5', d: '26/10/2026', items: [['ui', 'Thanh trên: đồng hồ Việt Nam chạy từng giây (giờ:phút:giây + thứ, ngày/tháng/năm) cạnh 2 nút "Vào ca làm" / "Thoát ca làm" luôn hiển thị — nút không khả dụng tự mờ đi']] },
   { v: '3.4', d: '26/10/2026', items: [['ui', 'Tinh chỉnh toàn diện theo taste-skill: bảng màu stone ấm + than + 1 accent vàng (bỏ tím mặc định), nút lún nhẹ khi bấm, đổi trang có chuyển động cascade, header bảng chữ in hoa giãn dòng, focus ring rõ, modal mờ nền pop spring']] },
   { v: '3.3', d: '26/10/2026', items: [['new', 'Cổng thanh toán SePay: webhook biến động số dư — giao dịch về hiện ngay trong Thu chi, tự đối soát đơn (khớp mã ĐH/số tiền), toast + thông báo tiền về'], ['new', 'Nhắn Tin kiểu Pancake: phân loại hội thoại (Chờ trả lời/Đã trả lời/Xong), gắn thẻ khách (Khách mới, Đã báo giá, Chờ cọc…), quản lý mẫu tin nhắn riêng']] },
   { v: '3.2', d: '26/10/2026', items: [['new', 'Mục Nhắn Tin: hội thoại Zalo / Facebook Fanpage — danh sách trò chuyện, bong bóng chat, mẫu trả lời nhanh, gửi link chọn ảnh cho khách, kết nối kênh (chờ token OA/Fanpage)']] },
@@ -4010,6 +4011,19 @@ function seedAttendance() {
 }
 
 /* ---- Nút điểm danh cá nhân trên thanh trên ---- */
+/* ---- Đồng hồ Việt Nam chạy thực + nút Vào ca / Thoát ca ---- */
+let __clockTimer = null;
+function startLiveClock() {
+  const paint = () => {
+    const el = document.getElementById('liveClock');
+    if (!el) return;
+    const d = new Date();
+    el.innerHTML = `<b>${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}</b><i>${WD[d.getDay()]}, ${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}</i>`;
+  };
+  paint();
+  if (!__clockTimer) __clockTimer = setInterval(paint, 1000);
+}
+
 function renderTopbarAttendance() {
   const box = $('#attWidget');
   if (!box) return;
@@ -4019,11 +4033,16 @@ function renderTopbarAttendance() {
   const bell = can('notifications')
     ? `<span class="bell-wrap" style="display:inline-flex;align-items:center"><button class="icon-btn" title="Thông báo" onclick="navigate('notifications')"><svg class="icon"><use href="#i-alert"/></svg></button>${un ? `<span class="bell-dot">${un > 9 ? '9+' : un}</span>` : ''}</span>`
     : '';
-  if (!u.staffId) { box.innerHTML = `${bell}<button class="punch-btn done" title="Tài khoản chưa liên kết nhân sự — quản trị sửa trong Tài khoản & Quyền">${icon('clock')} Chấm công</button>`; return; }
+  const clock = `<span class="live-clock" id="liveClock"></span>`;
+  if (!u.staffId) { box.innerHTML = `${clock}${bell}<button class="punch-btn done" title="Tài khoản chưa liên kết nhân sự — quản trị sửa trong Tài khoản & Quyền">${icon('clock')} Chấm công</button>`; startLiveClock(); return; }
   const rec = attOf(u.staffId, todayStr());
-  if (!rec) box.innerHTML = `${bell}<button class="punch-btn in" onclick="selfPunch()">${icon('clock')} ▶ Vào ca</button>`;
-  else if (!rec.out) box.innerHTML = `${bell}<span class="punch-time">${icon('clock')} trong ca từ ${rec.in}</span> <button class="punch-btn out" onclick="selfPunch()">■ Thoát ca</button>`;
-  else box.innerHTML = `${bell}<button class="punch-btn done" title="${fmtDate(rec.date)}: vào ca ${rec.in} – thoát ca ${rec.out}">${icon('check')} ${rec.in}–${rec.out} (${workedHours(rec)}h) ✓</button>`;
+  const btnIn = `<button class="punch-btn in" ${rec ? 'disabled' : ''} onclick="selfPunch()" title="${rec ? 'Đã vào ca lúc ' + rec.in : 'Ghi giờ chấm công vào ca (kèm GPS)'}">▶ Vào ca làm</button>`;
+  const btnOut = rec && !rec.out
+    ? `<button class="punch-btn out" onclick="selfPunch()" title="Ghi giờ về — kèm GPS">■ Thoát ca làm</button>`
+    : `<button class="punch-btn out" disabled title="${rec && rec.out ? 'Đã thoát ca ' + rec.out : 'Chưa vào ca'}">■ Thoát ca làm</button>`;
+  const done = rec && rec.out ? `<span class="punch-time">✓ ${rec.in}–${rec.out} · ${workedHours(rec)}h</span>` : (rec ? `<span class="punch-time">trong ca từ ${rec.in}</span>` : '');
+  box.innerHTML = `${clock}${done}${btnIn}${btnOut}${bell}`;
+  startLiveClock();
 }
 
 /* ---- GPS khi chấm công ---- */
@@ -6232,7 +6251,7 @@ async function init() {
   const d = new Date();
   calY = d.getFullYear(); calM = d.getMonth();
   document.title = state.settings.studioName + ' — CRM';
-  $('#todayBadge').innerHTML = `${icon('calendar')} ${WD[d.getDay()]}, ${fmtDate(todayStr())}`;
+  // (đồng hồ live ở topbar tự chạy — startLiveClock trong renderTopbarAttendance)
 
   let sid = null;
   try { sid = JSON.parse(localStorage.getItem(SESSION_KEY) || 'null'); } catch (e) { sid = null; }

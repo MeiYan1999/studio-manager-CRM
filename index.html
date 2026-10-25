@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/styles.css?v=11">
+<link rel="stylesheet" href="css/styles.css?v=12">
 </head>
 <body>
 
@@ -87,7 +87,6 @@
       <div class="topbar-right">
         <span id="attWidget"></span>
         <select class="select" id="branchSel" style="width:auto;font-size:12.5px;padding:7px 30px 7px 11px" onchange="setBranch(this.value)" title="Lọc dữ liệu theo chi nhánh"></select>
-        <span class="today-badge" id="todayBadge"></span>
       </div>
     </header>
     <div class="content" id="view"></div>
@@ -129,6 +128,6 @@
 <input type="file" id="importFile" accept=".json,application/json" style="display:none" onchange="doImport(this)">
 <input type="file" id="csvFile" accept=".csv,.txt,text/csv" style="display:none" onchange="doImportCsv(this)">
 
-<script src="js/app.js?v=10"></script>
+<script src="js/app.js?v=12"></script>
 </body>
 </html>
