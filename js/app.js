@@ -76,9 +76,10 @@ const SHIFTS = {
 const shiftOf = s => SHIFTS[(s && s.shift) || 'normal'] || SHIFTS.normal;
 
 // ---- Nhật ký cập nhật (changelog) ----
-const APP_VERSION = '3.5';
+const APP_VERSION = '3.6';
 const CL_KIND = { new: ['✨ mới', 'b-delivered'], fix: ['🐛 sửa lỗi', 'b-unpaid'], ui: ['🎨 giao diện', 'b-deposit'], imp: ['⚡ nâng cấp', 'b-confirmed'] };
 const CHANGELOG = [
+  { v: '3.6', d: '26/10/2026', items: [['new', 'Chấm công di chuyển chi nhánh: GPS ghi cả lúc thoát ca; nếu vào ca không ở chi nhánh nào thì ngày công ghi nhận theo chi nhánh khớp GPS thoát ca — hiện nhãn "Làm tại: Chi nhánh…" và 2 dòng vị trí Vào/Ra kèm bản đồ']] },
   { v: '3.5', d: '26/10/2026', items: [['ui', 'Thanh trên: đồng hồ Việt Nam chạy từng giây (giờ:phút:giây + thứ, ngày/tháng/năm) cạnh 2 nút "Vào ca làm" / "Thoát ca làm" luôn hiển thị — nút không khả dụng tự mờ đi']] },
   { v: '3.4', d: '26/10/2026', items: [['ui', 'Tinh chỉnh toàn diện theo taste-skill: bảng màu stone ấm + than + 1 accent vàng (bỏ tím mặc định), nút lún nhẹ khi bấm, đổi trang có chuyển động cascade, header bảng chữ in hoa giãn dòng, focus ring rõ, modal mờ nền pop spring']] },
   { v: '3.3', d: '26/10/2026', items: [['new', 'Cổng thanh toán SePay: webhook biến động số dư — giao dịch về hiện ngay trong Thu chi, tự đối soát đơn (khớp mã ĐH/số tiền), toast + thông báo tiền về'], ['new', 'Nhắn Tin kiểu Pancake: phân loại hội thoại (Chờ trả lời/Đã trả lời/Xong), gắn thẻ khách (Khách mới, Đã báo giá, Chờ cọc…), quản lý mẫu tin nhắn riêng']] },
@@ -4087,6 +4088,29 @@ function nearestGeoTarget(geo) {
 
 function fmtDist(m) { return m >= 1000 ? (m / 1000).toFixed(1).replace('.', ',') + ' km' : Math.round(m) + ' m'; }
 
+// Nơi làm việc trong ngày: ưu tiên chi nhánh khớp GPS VÀO ca; nếu vào ca không ở chi nhánh nào → dùng chi nhánh khớp GPS THOÁT ca
+function recBranch(rec) {
+  if (!rec) return null;
+  const ok = geo => { const nt = geo ? nearestGeoTarget(geo) : null; return (nt && nt.d * 1000 <= nt.radius) ? nt : null; };
+  return (ok(rec.inGeo) || ok(rec.outGeo) || {}).name || null;
+}
+
+function attGeoCell(r) {
+  const line = (geo, lbl) => {
+    if (!geo) return '';
+    const nt = nearestGeoTarget(geo);
+    const okM = nt && nt.d * 1000 <= nt.radius;
+    return `<div style="display:flex;gap:5px;align-items:center;margin-top:2px;flex-wrap:wrap">
+      <span class="cell-sub" style="flex:none;font-weight:800">${lbl}</span>
+      <a class="link" style="font-size:10.5px" href="https://maps.google.com/?q=${geo.lat},${geo.lng}" target="_blank" rel="noopener" title="Xem trên bản đồ">${icon('pin')} ${geo.lat}, ${geo.lng}</a>
+      ${nt ? `<span style="font-size:10px;font-weight:700;color:${okM ? 'var(--green)' : 'var(--red)'}">${okM ? '✓' : '⚠'} ${fmtDist(nt.d * 1000)}${okM ? ' · ' + esc(nt.name) : ' · xa ' + esc(nt.name)}</span>` : ''}
+    </div>`;
+  };
+  const br = recBranch(r);
+  return ((r.inGeo || r.outGeo) ? line(r.inGeo, 'Vào') + line(r.outGeo, 'Ra') : '<span class="cell-sub">—</span>')
+    + (br ? `<div style="margin-top:4px"><span class="badge b-confirmed" title="Chi nhánh xác định theo GPS chấm công">Làm tại: ${esc(br)}</span></div>` : '');
+}
+
 function geoCellHtml(geo) {
   if (!geo) return '<span class="cell-sub">—</span>';
   const map = `<a class="link" href="https://maps.google.com/?q=${geo.lat},${geo.lng}" target="_blank" rel="noopener">${icon('pin')} ${geo.lat}, ${geo.lng}</a>`;
@@ -4118,7 +4142,14 @@ async function selfPunch() {
     rec.out = time;
     rec.outGeo = geo || undefined;
     logAction('update', 'attendance', staffName(u.staffId) + ' THOÁT CA ' + time + ' (' + workedHours(rec) + ' giờ)');
-    toast('Đã THOÁT CA lúc ' + time + ' — làm việc ' + workedHours(rec) + ' giờ hôm nay' + where);
+    // Vào ca không ở chi nhánh nào nhưng thoát ca ở chi nhánh → ghi nhận làm tại chi nhánh đó
+    let extra = '';
+    if (geo) {
+      const inB = recBranch({ inGeo: rec.inGeo });
+      const outB = nearestGeoTarget(geo);
+      if (outB && outB.d * 1000 <= outB.radius && outB.name !== inB) extra = ' — ghi nhận làm tại ' + outB.name;
+    }
+    toast('Đã THOÁT CA lúc ' + time + ' — làm việc ' + workedHours(rec) + ' giờ hôm nay' + where + extra);
   } else { toast('Hôm nay bạn đã chấm công đủ rồi ✓', 'error'); return; }
   save(); renderTopbarAttendance(); render();
 }
@@ -4269,7 +4300,7 @@ function attendanceDayTab() {
         <td class="${r && r.out && toMin(r.out) < toMin(sh.end) ? 'loan-late' : 'money-muted'}">${r && r.out ? r.out : '—'}</td>
         <td class="money ta-r">${r && r.out ? workedHours(r) + 'h' : '—'}</td>
         <td><span class="badge ${st.cls}">${st.label}</span></td>
-        <td style="max-width:190px;font-size:11.5px">${r ? geoCellHtml(r.inGeo) : '<span class="cell-sub">—</span>'}</td>
+        <td style="max-width:215px;font-size:11px">${r ? attGeoCell(r) : '<span class="cell-sub">—</span>'}</td>
         <td class="money-muted" style="max-width:180px">${r && r.note ? esc(r.note) : '—'}</td>
         <td class="cell-actions ta-c"><button class="icon-btn" title="${r ? 'Sửa' : 'Chấm bổ sung'}" onclick="openAttendanceModal('${s.id}','${date}')">${icon(r ? 'edit' : 'plus')}</button></td>
       </tr>`;
