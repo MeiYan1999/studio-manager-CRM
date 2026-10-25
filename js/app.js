@@ -4878,8 +4878,14 @@ function saveSepay() {
   toast('Đã lưu — copy lại URL webhook mới (có secret) dán vào sepay.vn');
 }
 
-function applyPayment(pid, orderId) {
-  const p = byId(state.payments, pid), o = byId(state.orders, orderId);
+function deletePayment(pid) {
+  const p = byId(state.payments, pid);
+  if (!p || !confirm(`Xóa giao dịch ${fmtMoney(p.amount)} (${p.bank}) khỏi danh sách? Đơn hàng đã cộng tiền sẽ giữ nguyên.`)) return;
+  state.payments = state.payments.filter(x => x.id !== pid);
+  save(); render(); toast('Đã xóa giao dịch khỏi danh sách');
+}
+
+function applyPayment(pid, orderId) {  const p = byId(state.payments, pid), o = byId(state.orders, orderId);
   if (!p || !o) return;
   o.paidAmount = (+o.paidAmount || 0) + (+p.amount || 0);
   p.orderId = orderId; p.auto = true;
@@ -5023,7 +5029,7 @@ function cashTab() {
           <td class="money-muted" style="max-width:260px">${esc((p.content || '').slice(0, 80))}</td>
           <td class="money ta-r" style="color:var(--green)">+${fmtMoney(p.amount)}</td>
           <td>${o ? `<a class="link" onclick="viewOrder('${o.id}')">${esc(o.code)}</a> ${p.auto ? '<span class="badge b-delivered">tự khớp</span>' : ''}` : '<span class="badge b-unpaid">chưa khớp</span>'}</td>
-          <td class="cell-actions ta-c">${!o ? `<button class="btn btn-ghost btn-sm" onclick="openLinkPaymentModal('${p.id}')">Liên kết đơn</button>` : ''}</td>
+          <td class="cell-actions ta-c">${!o ? `<button class="btn btn-ghost btn-sm" onclick="openLinkPaymentModal('${p.id}')">Liên kết đơn</button>` : ''}<button class="icon-btn danger" title="Xóa giao dịch này" onclick="deletePayment('${p.id}')">${icon('trash')}</button></td>
         </tr>`;
       }).join('')}
       </tbody>
