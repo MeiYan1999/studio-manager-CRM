@@ -1,4 +1,8 @@
-.DS_Store
-.zcode/
-node_modules/
-*.log
+bin/
+obj/
+publish/
+data/
+.vs/
+*.user
+*.suo
+appsettings.Development.json

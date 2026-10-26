@@ -1,160 +1,253 @@
-# 📸 Studio Manager — Web CRM quản lý studio chụp ảnh
+# Mây Album
 
-Ứng dụng web CRM hoàn chỉnh dành cho studio chụp ảnh: quản lý khách hàng, lịch chụp, đơn hàng & công nợ, gói dịch vụ, nhân sự và thống kê kinh doanh. Giao diện tiếng Việt, không cần cài đặt, không cần server — mở là chạy.
+Mây Album là một web app nhỏ gọn để studio tạo album ảnh riêng tư từ thư mục Google Drive, gửi liên kết cho khách hàng và nhận lại danh sách ảnh khách yêu thích.
 
-## ✨ Tính năng
+- Giao diện tiếng Việt, tông màu kem – mực – terracotta.
+- Tạo album từ thư mục Google Drive công khai (có thể đọc cả thư mục con).
+- Mỗi album có một liên kết riêng dạng `/a/{token}`.
+- Khách xem ảnh, thả tim, tìm nhanh bằng “mã hình”, ghi chú và gửi lựa chọn.
+- Studio xem lựa chọn, ghi chú, thời điểm gửi, xuất CSV và quản lý trạng thái chia sẻ.
+- Sao chép nhanh mã ảnh khách đã chọn và lọc đúng tệp RAW/JPG từ thư mục trên máy tính, xử lý hoàn toàn trong trình duyệt.
+- Bảng công việc kiểu Trello: kéo thả thẻ giữa các danh sách, nhãn màu, checklist, hạn chót và tùy chỉnh nền bảng.
+- Tài khoản riêng cho từng thành viên với hai vai trò quản trị viên/nhân viên; mỗi thẻ có nhật ký ghi lại người tạo, sửa hoặc kéo thẻ.
+- Có sẵn hai album mẫu để thử ngay, không cần Google Drive.
 
-### 📊 Tổng quan (Dashboard)
-- Doanh thu tháng này & so sánh với tháng trước
-- Số lịch chụp tháng, khách hàng mới, công nợ phải thu
-- Biểu đồ doanh thu 6 tháng gần nhất
-- Lịch chụp 7 ngày tới và đơn hàng gần đây
+## Chạy ứng dụng
 
-### 📅 Lịch chụp
-- Xem **lịch tháng** (đặt lịch nhanh bằng cách bấm vào ngày) hoặc **danh sách**
-- Luồng trạng thái đầy đủ: Chờ xác nhận → Đã xác nhận → Đang chụp → Đang hậu kỳ → Đã trả ảnh (kèm timeline trực quan)
-- Phân công nhiếp ảnh gia, địa điểm, giờ chụp, thời lượng
-- Bộ lọc theo trạng thái, tìm kiếm
+Yêu cầu: [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0).
 
-### 💰 Đơn hàng & Thanh toán
-- Tạo đơn từ gói dịch vụ có sẵn + tùy chỉnh từng dòng (album thêm, phóng ảnh, trang điểm...)
-- Chiết khấu, tiền cọc, thanh toán từng phần — tự tính còn lại
-- Thanh toán tiến độ với thanh tiến trình
-- **In hóa đơn** định dạng A4 sẵn sàng giao khách
-- Quản lý công nợ theo khách hàng
-
-### 👥 Khách hàng
-- Hồ sơ đầy đủ: liên hệ, ghi chú, lịch sử chụp & mua hàng
-- Thống kê nhanh: số lịch chụp, tổng chi tiêu, công nợ
-- Phân loại khách lẻ / doanh nghiệp, tìm kiếm & lọc
-
-### 🗂 Bảng công việc (Kanban kiểu Trello)
-- Bảng kanban với các cột tùy chỉnh (mặc định: Cần làm → Đang thực hiện → Chờ duyệt → Hoàn thành)
-- **Kéo & thả thẻ** giữa các cột, sắp xếp thứ tự thẻ ngay trong cột
-- Mỗi thẻ: người phụ trách, hạn chót (tự tô màu đỏ khi trễ, vàng khi đến hạn), độ ưu tiên, mô tả, liên kết tới lịch chụp
-- Thêm / đổi tên / xóa cột (thẻ trong cột bị xóa tự chuyển sang cột kế tiếp)
-- Lọc bảng theo nhân sự
-
-### 👗 Trang phục • Concept • Mượn đồ
-- **Kho trang phục**: váy cưới, vest, áo dài, hanbok... theo size/màu; tự tính *Sẵn có = Tổng − Đang mượn*
-- **Concept**: quản lý bộ dựng concept (Hàn Quốc, Vintage...) kèm phí sử dụng, trạng thái Sẵn sàng/Bảo trì
-- **Mượn đồ**: phiếu mượn cho khách hoặc nhân viên, liên kết lịch chụp, tiền cọc, hạn trả — **tự trừ/hồi kho**, cảnh báo **quá hạn** ( tô đỏ + đếm số ngày trễ), ghi nhận trả chỉ với 1 nút
-- Đồ mượn hiển thị ngay trong chi tiết lịch chụp
-
-### 🔐 Đăng nhập & Phân quyền
-- **Đăng ký tài khoản quản trị** ở lần sử dụng đầu tiên; sau đó đăng nhập bằng tài khoản đó
-- Admin tạo tài khoản đăng nhập cho từng nhân viên trong **Hệ thống → Tài khoản & Quyền**
-- **Mẫu quyền nhanh**: Quản trị (toàn quyền) / Lễ tân / Nhiếp ảnh gia / Hậu kỳ — hoặc tùy chỉnh tick từng phân hệ
-- Mỗi tài khoản **chỉ thấy và dùng được** những phân hệ được cấp; gõ trực tiếp URL phân hệ không có quyền cũng bị chặn
-- **Ép đổi mật khẩu lần đầu**: tài khoản do admin tạo / được cấp lại mật khẩu sẽ phải tự đặt mật khẩu riêng ngay sau khi đăng nhập (badge "Cần đổi MK")
-- Khóa/mở khóa tài khoản, chống tự khóa chính mình, luôn giữ ≥ 1 quản trị hoạt động
-- Mật khẩu được băm (SHA-256) trước khi lưu; phiên đăng nhập lưu riêng, có nút Đăng xuất
-
-### 📜 Nhật ký thao tác
-- Ghi lại **ai đã làm gì, lúc nào**: đăng nhập/đăng xuất, thêm/sửa/xóa khách hàng, lịch chụp, đơn hàng, thu tiền, công việc, kho trang phục, phiếu mượn, tài khoản, dữ liệu...
-- Xem trong **Hệ thống → Nhật ký thao tác** (riêng quyền); lọc theo người dùng / loại hành động, tìm kiếm, giới hạn 500 bản ghi gần nhất
-
-### 🖥 Chế độ server (nhiều máy dùng chung) — Node.js + PostgreSQL
-- Mặc định app chạy **độc lập** (localStorage) — không cần cài gì
-- Khi cần nhiều máy/cùng dữ liệu: khởi động backend, app **tự dò và chuyển sang chế độ server**
-  (đăng nhập xác thực phía server, dữ liệu lưu PostgreSQL, localStorage chỉ là cache offline)
-
-```bash
-# 1) Cài & khởi động PostgreSQL, tạo database (chạy một lần)
-brew install postgresql@16
-brew services start postgresql@16
-createdb studio_manager
-
-# 2) Khởi động backend
-cd server
-npm install
-npm start            # → http://localhost:8090
-
-# 3) Mở http://localhost:8090 từ bất kỳ máy nào trong LAN
-#    Máy đầu tiên sẽ đăng ký tài khoản quản trị; các máy sau đăng nhập bình thường
+```powershell
+dotnet run
 ```
 
-- Biến môi trường: `PORT` (mặc định 8090), `DATABASE_URL` (mặc định `postgresql://localhost:5432/studio_manager`)
-- Lưu ý: đồng bộ theo kiểu "bản ghi mới nhất thắng" (last-write-wins) — đủ dùng cho team nhỏ;
-  khởi động lại server sẽ yêu cầu đăng nhập lại (session trong bộ nhớ)
+Mở http://localhost:5080.
 
-### 💰 Tài chính & Lương
-- **Báo cáo tháng**: doanh thu (đã thu) vs chi phí, lợi nhuận, lương chưa trả + biểu đồ 6 tháng
-- **Chi phí**: quản lý theo loại (thuê studio, quảng cáo, đồ nghề, điện nước...)
-- **Lương tự động**: mỗi nhân sự có lương cơ bản + % hoa hồng — bấm "Tính lương tự động" là hệ thống tính từ các buổi chụp nhân sự đó phụ trách trong tháng (gắn với đơn hàng); đánh dấu đã trả
+Lần chạy đầu tiên, ứng dụng sẽ tạo `data/store.json` và nạp hai album mẫu:
 
-### 📄 Hợp đồng thông minh
-- Tạo hợp đồng gắn khách hàng & lịch chụp; **lịch thanh toán tự sinh** theo tỷ lệ (50/50, 30/40/30, 40/40/20, 30/70) với hạn thanh toán tự gắn ngày chụp
-- **Sinh 7 điều khoản mẫu** trong 1 nút (cọc, hủy lịch, giao ảnh, bản quyền...) — chỉnh sửa tự do
-- **Phân tích thông minh**: cảnh báo quá hạn thu, chưa thu cọc, chờ ký lâu, đã thu đủ
-- Tick từng đợt thu ngay trên hợp đồng; **in hợp đồng** định dạng A4 đầy đủ 2 chữ ký
+| Album | Liên kết |
+| --- | --- |
+| Ngày Mình Chung Đôi | http://localhost:5080/a/demo-ngay-chung-doi |
+| Biển Nhớ | http://localhost:5080/a/demo-bien-nho |
 
-### 🌐 Cổng khách hàng
-- Mỗi buổi chụp có **link riêng** (không cần tài khoản): khách xem tiến độ 5 bước, trạng thái thanh toán và **tự tick chọn ảnh cần chỉnh sửa** — chọn xong lưu, studio nhận ngay
-- Quản lý trong chi tiết buổi chụp → "Thư viện & cổng KH": sinh danh sách ảnh, mở/khóa chọn ảnh, copy link
-- Chạy cùng backend: link mở được từ máy khác (endpoint public `/api/portal/:token`)
+Trang quản trị: http://localhost:5080/admin
 
-### ⏰ Chấm công nhân viên
-- **Nút điểm danh vào/ra** ngay trên thanh trên (tài khoản cần được liên kết nhân sự trong Tài khoản & Quyền)
-- Tự tính **giờ làm**, đánh dấu **đi muộn / về sớm** theo giờ làm việc cấu hình trong Cài đặt (mặc định 9:00–18:00)
-- Phân hệ **Chấm công**: xem theo ngày (mọi nhân sự, ai chưa điểm danh, thống kê muộn) hoặc **theo tháng** (ngày có mặt, tổng giờ, giờ TB/ngày, số lần muộn)
-- Quản trị chấm bổ sung / sửa tay cho nhân sự quên điểm danh; mọi thao tác ghi nhật ký
+Tài khoản quản trị mặc định: `admin` · mật khẩu `studio2026`.
 
-### 📦 Gói dịch vụ & 👤 Nhân sự
-- Quản lý bảng giá theo loại (Cưới, Gia đình, Chân dung, Sản phẩm, Sự kiện...)
-- Ekip: vai trò (nhiếp ảnh gia / hậu kỳ / trợ lý), trạng thái làm việc, lịch được phân công
+> Hãy đổi mật khẩu này ngay trong **Cài đặt studio → Tài khoản studio** trước khi đưa ứng dụng lên mạng. Xem phần [Bảo mật](#bảo-mật).
 
-### ⚙️ Cài đặt & Dữ liệu
-- Thông tin studio (hiện trên hóa đơn)
-- **Xuất / Nhập backup JSON**, khôi phục dữ liệu mẫu, xóa dữ liệu
+## Kết nối Google Drive
 
-## 🚀 Cách chạy
+Ứng dụng dùng Google Drive API v3 với một API key, chỉ đọc được các thư mục được chia sẻ công khai.
 
-**Cách 1 — Mở trực tiếp:**
-> Bấm đúp vào file `index.html` (hoặc kéo vào trình duyệt).
+1. Mở [Google Cloud Console](https://console.cloud.google.com/) và tạo một project.
+2. Bật **Google Drive API** cho project.
+3. Vào **APIs & Services → Credentials**, chọn **Create credentials → API key**.
+4. Nên giới hạn key theo IP hoặc website để tránh bị lạm dụng.
+5. Dán key vào **Cài đặt studio → Google Drive API** trong trang quản trị, hoặc cấu hình trong `appsettings.json`:
 
-**Cách 2 — Chạy qua server local (khuyên dùng):**
-```bash
-cd photo-studio-crm   # hoặc thư mục chứa project
-python3 -m http.server 8080
-# Mở http://localhost:8080
+```json
+{
+  "GoogleDrive": {
+    "ApiKey": "AIza..."
+  }
+}
 ```
 
-## 💾 Dữ liệu nằm ở đâu?
+Có thể dùng biến môi trường thay vì sửa tệp:
 
-Toàn bộ dữ liệu lưu trong **localStorage của trình duyệt** trên máy bạn — không gửi lên internet. 
-⚠️ Xóa lịch sử/dữ liệu trình duyệt sẽ mất dữ liệu → nên dùng chức năng **Xuất dữ liệu** (Cài đặt) để backup định kỳ.
-
-Lần đầu mở app sẽ tự nạp **dữ liệu mẫu** để bạn xem cách hoạt động; vào **Cài đặt → Xóa toàn bộ dữ liệu** để bắt đầu với dữ liệu thật của studio.
-
-## 📁 Cấu trúc
-
-```
-├── index.html      # Khung ứng dụng + bộ icon SVG
-├── css/styles.css  # Design system (màu, component, responsive)
-└── js/app.js       # Toàn bộ logic: state, views, modal, lịch, hóa đơn...
+```powershell
+$env:GoogleDrive__ApiKey = "AIza..."
 ```
 
-## 🗃 Mô hình dữ liệu
+Thư mục ảnh phải được chia sẻ ở chế độ **“Bất kỳ ai có liên kết”**. Khi tạo album, dán liên kết dạng:
 
-| Đối tượng | Trường chính |
-|---|---|
-| Customer | name, type (lẻ/DN), phone, email, address, notes |
-| Package | name, category, price, hours, includes, active |
-| Booking | customerId, packageId, date, startTime, hours, location, photographerId, status |
-| Order | code, customerId, bookingId, items[], discount, paidAmount, status |
-| Staff | name, role, phone, email, active |
-| TaskColumn | name (cột kanban) |
-| Task | columnId, title, desc, assigneeId, dueDate, priority, bookingId |
-| Outfit | name, category, size, color, qty, note |
-| Concept | name, desc, fee, status (ready/maintenance) |
-| Loan | outfitId, qty, borrowerType, customerId/staffId, bookingId, borrowDate, dueDate, returnDate, deposit |
-| User | username, passHash, name, staffId, preset, perms[], active, lastLogin |
+```text
+https://drive.google.com/drive/folders/1AbCdEf...
+```
 
-## 🗺 Lộ trình gợi ý (phát triển tiếp)
+Ứng dụng cũng chấp nhận riêng ID thư mục. Ảnh lấy trực tiếp từ Drive qua ảnh thu nhỏ của Google, không tải toàn bộ ảnh về máy chủ.
 
-- [ ] Backend thật: Node.js/Express hoặc Next.js + PostgreSQL, đồng bộ nhiều thiết bị
-- [ ] Upload & giao ảnh cho khách theo từng booking
-- [ ] Nhắc lịch tự động qua Zalo OA / SMS / email
-- [ ] Báo cáo nâng cao: doanh thu theo gói, theo nhiếp ảnh gia, nguồn khách
-- [ ] Đa chi nhánh studio
+## Quy trình sử dụng
+
+### Tạo album
+
+1. Đăng nhập `/admin`.
+2. Chọn **Tạo album mới**.
+3. Dán liên kết thư mục Drive và bấm **Xem trước** để kiểm tra ảnh, số lượng và chọn ảnh bìa.
+4. Điền tên album, khách hàng, ngày chụp, địa điểm và lời nhắn.
+5. Chọn các tuỳ chọn: nhận lựa chọn, cho phép tải ảnh, chia sẻ ngay hay lưu bản nháp.
+6. Bấm **Tạo album**, sau đó sao chép liên kết gửi cho khách.
+
+Mã hình được tạo tự động từ tên tệp. Ví dụ `LM-001.jpg` → `LM-001`. Nếu tên tệp không có mã, ứng dụng sẽ tạo mã duy nhất từ tên tệp.
+
+### Phía khách hàng
+
+Khách mở liên kết riêng, xem album và:
+
+- thả tim ảnh muốn chọn;
+- tìm theo mã hình hoặc tên tệp;
+- lọc **Tất cả** / **Đã chọn**;
+- mở ảnh lớn, xem trước và tải ảnh nếu studio bật quyền tải;
+- ghi chú và gửi lựa chọn;
+- quay lại chỉnh sửa và gửi lại sau khi đã gửi.
+
+Lựa chọn được lưu trên máy chủ theo từng album. Mỗi album nên dành cho một khách hoặc một nhóm khách dùng chung một liên kết; ứng dụng không tách lựa chọn theo từng người dùng.
+
+### Quản lý album
+
+Trong trang chi tiết album, studio có thể:
+
+- xem ảnh khách đã chọn và ghi chú;
+- bật/tắt nhận lựa chọn, cho phép tải ảnh, chế độ chia sẻ;
+- sửa thông tin album;
+- đổi ảnh bìa;
+- đồng bộ lại thư mục Drive (giữ nguyên lựa chọn cũ);
+- sao chép nhanh mã ảnh khách đã chọn;
+- mở công cụ lọc ảnh trên máy tính với album đã chọn sẵn;
+- tải CSV danh sách ảnh khách đã chọn;
+- đổi liên kết chia sẻ (liên kết cũ mất hiệu lực ngay);
+- xoá album.
+
+### Bảng công việc
+
+Trang **Bảng công việc** (`/admin/board`) giữ nhịp sản xuất của studio trên một bảng kiểu Trello. Lần chạy đầu tiên sẽ nạp sẵn một bảng mẫu với năm danh sách: Ý tưởng, Chuẩn bị, Đang chụp, Hậu kỳ và Đã giao khách.
+
+- Kéo thả thẻ giữa các danh sách hoặc trong cùng một danh sách để đổi thứ tự. Trên điện thoại hoặc khi dùng bàn phím, mở thẻ và chọn danh sách trong mục **Danh sách**.
+- Mỗi thẻ có tên, mô tả, hạn chót, trạng thái hoàn tất hạn, nhãn màu, checklist và album liên kết. Tiến độ checklist hiển thị ngay trên thẻ và trên thanh tiến độ của bảng.
+- Tìm thẻ theo tên, nhãn hoặc album; lọc theo **Quá hạn**, **7 ngày tới**, **Chưa có hạn** và theo từng nhãn. Nút **Xoá bộ lọc** đưa bảng về trạng thái đầy đủ.
+- Thêm thẻ nhanh ở cuối mỗi danh sách: nhập tên rồi nhấn **Enter** (Shift + Enter để xuống dòng). Nút **Thêm thẻ** trên đầu trang mở đầy đủ biểu mẫu.
+- Menu của mỗi danh sách cho phép đổi tên, đổi màu, di chuyển sang trái/phải hoặc xoá. Danh sách mới thêm ở cuối bảng.
+- **Tùy chỉnh bảng** đổi tên, mô tả, chọn một trong năm nền (Mực ấm, Đất nung, Vườn chiều, Chiều muộn, Giấy kraft), chỉnh **màu nền và màu chữ của thẻ** (có xem trước và nút đặt lại mặc định) và quản lý bộ nhãn dùng chung. Màu thẻ áp dụng cho toàn bảng; mặc định là nền sáng, chữ mực đậm để luôn dễ đọc.
+- Mỗi thẻ có **Nhật ký hoạt động**: ai đã tạo, sửa hoặc kéo thẻ, thời điểm và các thay đổi chi tiết (tên, mô tả, hạn, nhãn, checklist, album, danh sách). Nhấn **Chi tiết** để mở danh sách thay đổi. Thẻ cũ bắt đầu với nhật ký trống; mỗi thẻ giữ tối đa 60 hoạt động gần nhất.
+- Bảng được lưu trong `data/store.json` cùng album, tài khoản và cài đặt studio. Dữ liệu phiên bản 1 hoặc 2 được tự động nâng cấp lên phiên bản 3 khi khởi động, không làm mất album, thẻ hay cài đặt cũ.
+- Khi xoá một album, liên kết album trên các thẻ liên quan cũng được gỡ bỏ; thẻ vẫn giữ nguyên.
+
+### Tài khoản studio
+
+Trang **Cài đặt studio** (`/admin/settings`) chỉ dành cho quản trị viên. Tại mục **Tài khoản studio**, quản trị viên có thể:
+
+- tạo tài khoản mới với tên hiển thị, tên đăng nhập, vai trò và mật khẩu;
+- sửa tên hiển thị, tên đăng nhập hoặc vai trò;
+- đặt lại mật khẩu khi thành viên quên;
+- tạm khoá hoặc kích hoạt lại tài khoản mà vẫn giữ lịch sử thẻ.
+
+Tên đăng nhập gồm 3–32 ký tự thường không dấu (`a-z`, `0-9`, dấu chấm, gạch ngang, gạch dưới). Mật khẩu dài 8–128 ký tự và được băm bằng PBKDF2-HMAC-SHA256 trước khi lưu. Mỗi người nên dùng tài khoản riêng để nhật ký thẻ ghi đúng người thao tác.
+
+Hai vai trò:
+
+- **Quản trị viên** xem được mọi trang, quản lý tài khoản và cài đặt studio.
+- **Nhân viên** dùng được tổng quan, bảng công việc, album và công cụ lọc ảnh, nhưng không thấy trang Cài đặt.
+
+Không thể tự đổi vai trò, tự tạm khoá tài khoản đang đăng nhập hoặc làm mất quản trị viên hoạt động cuối cùng. Tài khoản bị tạm khoá sẽ bị đăng xuất ngay.
+
+### Lọc ảnh theo mã khách chọn
+
+Trang **Lọc ảnh theo mã** (`/admin/tools`) giúp studio lấy đúng các tệp ảnh gốc tương ứng với những ảnh khách đã thả tim.
+
+1. Mở **Lọc ảnh theo mã** từ thanh bên, tổng quan hoặc trang chi tiết album.
+2. Chọn album để tự điền mã, hoặc dán mã thủ công. Có thể sao chép nhanh theo định dạng xuống dòng, dấu phẩy, dấu cách hoặc kèm đuôi tệp.
+3. Chọn chế độ so khớp **Chữ và số** (mặc định) hoặc **Chỉ lấy số**.
+4. Chọn **thư mục ảnh gốc** trên máy tính, đặt tên thư mục con nhận ảnh (hoặc chọn thư mục lưu riêng), chọn quét thư mục con và định dạng **RAW & JPG / Chỉ RAW / Chỉ JPG-PNG**.
+5. Bấm **Bắt đầu lọc ảnh từ máy tính**.
+
+Ảnh gốc được giữ nguyên. Ảnh khớp được sao chép vào thư mục nhận; nếu tên đã tồn tại, ứng dụng thêm hậu tố `-2`, `-3`… để không ghi đè. Thư mục nhận được bỏ qua khi quét để tránh tự sao chép lại.
+
+Công cụ dùng File System Access API nên cần **Chrome hoặc Edge trên máy tính** và một secure context (`localhost` hoặc HTTPS). Ảnh được đọc và ghi trực tiếp trên máy; Mây Album không tải ảnh lên máy chủ.
+
+## Cấu hình
+
+Các giá trị chính trong `appsettings.json`:
+
+| Khoá | Mặc định | Ý nghĩa |
+| --- | --- | --- |
+| `AdminCode` | `studio2026` | Mật khẩu khởi tạo cho tài khoản quản trị `admin` khi dữ liệu chưa có tài khoản |
+| `GoogleDrive:ApiKey` | rỗng | API key Google Drive |
+| `Data:Directory` | `data` | Thư mục chứa `store.json` |
+
+`AdminCode` chỉ được dùng để tạo tài khoản quản trị đầu tiên. Sau khi dữ liệu đã có tài khoản, đổi biến này không đổi mật khẩu đang dùng; hãy đặt lại mật khẩu trong **Cài đặt studio → Tài khoản studio**.
+
+Ví dụ đặt mật khẩu quản trị ban đầu bằng biến môi trường:
+
+```powershell
+$env:AdminCode = "mat-khau-rieng-cua-ban"
+dotnet run
+```
+
+Đổi cổng chạy:
+
+```powershell
+$env:ASPNETCORE_URLS = "http://localhost:5090"
+dotnet run
+```
+
+## Dữ liệu
+
+- Toàn bộ dữ liệu nằm trong `data/store.json`, gồm album, cài đặt studio, tài khoản và bảng công việc.
+- Tệp dùng `schemaVersion` 3. Khi mở dữ liệu phiên bản 1 hoặc 2, ứng dụng tự nâng cấp, thêm bảng mẫu hoặc tài khoản quản trị ban đầu và giữ nguyên album, thẻ, lựa chọn cùng cài đặt hiện có. Nhật ký của thẻ cũ bắt đầu trống.
+- Mật khẩu chỉ được lưu dưới dạng băm PBKDF2-HMAC-SHA256 (120.000 vòng, salt riêng cho từng tài khoản); không có mật khẩu dạng văn bản thuần trong `store.json`.
+- Ghi tệp theo kiểu atomic: ghi tệp tạm rồi thay thế, tránh hỏng dữ liệu khi đang ghi.
+- Để khôi phục dữ liệu mẫu, dừng ứng dụng, xoá `data/store.json` rồi chạy lại.
+- Nên sao lưu `data/store.json` định kỳ.
+- Google API key nhập trong trang Cài đặt được lưu trong `store.json` và ghi đè key trong `appsettings.json`. Tệp này chứa dữ liệu riêng tư, không nên commit hoặc chia sẻ công khai.
+
+## Bảo mật
+
+Đây là ứng dụng một studio, chạy trên một máy chủ, không phải hệ thống multi-tenant.
+
+Trước khi triển khai công khai:
+
+1. **Đổi mật khẩu tài khoản `admin`** trong **Cài đặt studio → Tài khoản studio** và tạo tài khoản riêng cho từng thành viên. Đừng dùng chung một tài khoản.
+2. Chạy sau HTTPS (reverse proxy như Caddy, Nginx hoặc IIS). Cookie phiên chỉ được đặt `Secure` khi request là HTTPS.
+3. Giới hạn Google API key theo IP/website và chỉ bật Drive API.
+4. Bảo vệ thư mục `data/` và sao lưu thường xuyên. Tệp chứa hash mật khẩu và API key.
+5. Cân nhắc thêm rate limit cho `/api/auth/login` ở reverse proxy. Ứng dụng chỉ có độ trễ 320 ms cho mỗi lần nhập sai, không có khoá tài khoản.
+6. Liên kết album là bearer token: ai có liên kết đều xem được album. Dùng **Đổi liên kết chia sẻ** khi cần thu hồi quyền truy cập.
+7. Phiên đăng nhập lưu trong bộ nhớ; khởi động lại máy chủ sẽ đăng xuất tất cả phiên.
+8. Trang Cài đặt và các API quản lý tài khoản chỉ cho vai trò quản trị viên. Tài khoản bị tạm khoá mất hiệu lực ngay cả khi đang có phiên.
+
+## Triển khai
+
+```powershell
+dotnet publish -c Release -o publish
+```
+
+Chạy bản publish:
+
+```powershell
+$env:ASPNETCORE_ENVIRONMENT = "Production"
+$env:AdminCode = "ma-rieng-cua-ban"
+$env:GoogleDrive__ApiKey = "AIza..."
+dotnet .\publish\MayAlbum.dll
+```
+
+Nên đặt ứng dụng sau reverse proxy có HTTPS và giữ nguyên thư mục `data/` khi nâng cấp.
+
+`AdminCode` chỉ dùng một lần để tạo tài khoản `admin` đầu tiên khi `data/store.json` chưa có người dùng. Khi đã có tài khoản, biến này không còn tác dụng; muốn đổi mật khẩu quản trị, hãy đặt lại trong **Cài đặt studio → Tài khoản studio**.
+
+## Cấu trúc dự án
+
+```text
+Api/                 endpoint công khai, quản trị và đăng nhập
+Models/              model dữ liệu, DTO, session store
+Services/            JSON store, Google Drive, dữ liệu mẫu, tiện ích
+wwwroot/
+  assets/css/        styles.css, admin.css, album.css
+  assets/js/         app.js (router), admin.js, board.js, tools.js, album.js, api.js, ui.js
+  assets/img/demo/   ảnh mẫu và thumbnail
+  assets/fonts/      font self-hosted
+  index.html         điểm vào của SPA
+data/store.json      dữ liệu studio (tự tạo)
+Program.cs           cấu hình ASP.NET Core, CSP, static files, fallback
+```
+
+Frontend là HTML/CSS/ES module thuần, không cần Node.js hay bước build.
+
+## Giới hạn hiện tại
+
+- Không gửi email tự động; studio sao chép liên kết và gửi thủ công.
+- Chưa có tải toàn bộ album dạng ZIP; chỉ tải từng ảnh hoặc xuất CSV lựa chọn.
+- Công cụ lọc ảnh cần Chrome/Edge trên máy tính và quyền truy cập thư mục; Firefox và Safari chưa hỗ trợ File System Access API.
+- Kết quả lọc ảnh chỉ được ghi vào thư mục do người dùng chọn trên máy, không đồng bộ ngược lên album.
+- Drive API key chỉ đọc được thư mục công khai, không hỗ trợ thư mục riêng tư hoặc tài khoản Drive được uỷ quyền.
+- Bố cục gallery dùng CSS multi-column nên thứ tự hiển thị theo cột; thứ tự này có thể khác thứ tự đọc từng hàng.
+- Dữ liệu JSON phù hợp với một studio và số lượng album vừa phải; nếu mở rộng nhiều studio/nhiều người dùng đồng thời, nên chuyển sang cơ sở dữ liệu thật.
